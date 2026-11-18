@@ -1,0 +1,563 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>slackline · interactive prototype</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='-32 -40 64 72'%3E%3Cpath d='M-17 -12 L-14 -31 L-3 -19Z M3 -19 L14 -31 L17 -12Z' fill='%23E4572E' stroke='%2322302A' stroke-width='3' stroke-linejoin='round'/%3E%3Ccircle r='22' fill='%23E4572E' stroke='%2322302A' stroke-width='3'/%3E%3Cpath d='M-17 -8 C-7 -15 7 -15 17 -8 M-20 2 C-9 -6 9 -6 20 2 M-17 11 C-6 5 6 5 17 11' fill='none' stroke='%23FFB59A' stroke-width='2'/%3E%3Cpath d='M-8.5 -1 q3 -3.5 6 0 M2.5 -1 q3 -3.5 6 0' fill='none' stroke='%2322302A' stroke-width='2.4' stroke-linecap='round'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400..800&family=Fraunces:ital,opsz,wght@0,9..144,400..700;1,9..144,400..700&display=swap" rel="stylesheet">
+<style>
+:root{--frame:#D9D4C8;--ink:#22302A;--yarn:#E4572E;--sun:#FFC93C;--leaf:#2F8F6B;--berry:#D7385E;--paper:#FFFFFF;--muted:#7A7466;--sub:#55524A;
+  color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--frame:#181C1A;color-scheme:dark}}
+:root[data-theme="dark"]{--frame:#181C1A;color-scheme:dark}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*,*::before,*::after{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--frame);overflow:hidden;font-family:'Figtree',system-ui,-apple-system,'Segoe UI',sans-serif;color:var(--ink)}
+#vp{position:relative;width:100%;height:100%;overflow:hidden}
+#stage{position:absolute;left:0;top:0;width:1440px;height:1000px;transform-origin:0 0;background:#E3ECE9;overflow:hidden;border-radius:6px;user-select:none;-webkit-user-select:none}
+#map{position:absolute;left:0;top:0;touch-action:none}
+#threads{position:absolute;left:0;top:0;pointer-events:none}
+.fr{font-family:'Fraunces',Georgia,serif;font-variation-settings:'opsz' 72}
+button{font:inherit;color:inherit;cursor:pointer}
+button:focus-visible,select:focus-visible+.pickface{outline:3px solid var(--sun);outline-offset:3px}
+.card{position:absolute;background:var(--paper);border:2.5px solid var(--ink);border-radius:18px;box-shadow:4px 5px 0 var(--ink)}
+/* header */
+.brand{position:absolute;left:30px;top:22px;display:flex;align-items:center;gap:10px;background:none;border:0;padding:4px;border-radius:12px}
+.brand .wm{font-family:'Fraunces',Georgia,serif;font-weight:680;font-size:31px;letter-spacing:-0.6px;font-variation-settings:'opsz' 72}
+.divider{position:absolute;left:226px;top:26px;width:1.5px;height:50px;background:#C4BBA6}
+.trip{position:absolute;left:240px;top:20px}
+.trip .row1{display:flex;align-items:center;gap:4px}
+.tname{font-family:'Fraunces',Georgia,serif;font-weight:660;font-size:23px;color:var(--ink);background:transparent;border:2px solid transparent;border-radius:8px;padding:1px 6px;max-width:420px}
+.tname:hover{border-color:#C4BBA6}
+.tname:focus{border-color:var(--ink);background:#fff;outline:none}
+.pencil{width:28px;height:28px;border:0;background:none;border-radius:8px;display:flex;align-items:center;justify-content:center;color:var(--muted);padding:0}
+.pencil:hover{background:#fff}
+.mroute{display:flex;align-items:center;gap:6px;font-size:13.5px;font-weight:600;padding-left:8px;margin-top:3px}
+.mroute .mut{color:var(--muted);font-weight:550}
+.notesbtn{position:absolute;left:878px;top:38px;height:46px;padding:0 18px;display:flex;align-items:center;gap:9px;background:var(--paper);border:2.5px solid var(--ink);border-radius:14px;box-shadow:3px 4px 0 var(--ink);font-weight:650;font-size:15px}
+.notesbtn.on{background:var(--ink);color:#fff}
+.notesbtn:active,.stepper .b:active,.hint button:active,.go:active{transform:translate(2px,2px);box-shadow:1px 2px 0 var(--ink)}
+/* hud */
+.hud{left:1090px;top:34px;width:318px;height:252px;transition:border-color .2s,box-shadow .2s}
+.hud.alert{border-color:var(--berry);box-shadow:4px 5px 0 var(--berry)}
+.hud.shake{animation:shake .45s}
+@keyframes shake{0%,100%{transform:translateX(0)}20%{transform:translateX(-7px)}40%{transform:translateX(7px)}60%{transform:translateX(-4px)}80%{transform:translateX(4px)}}
+.hud .top{position:absolute;left:24px;right:24px;top:18px;display:flex;justify-content:space-between;font-size:13px;font-weight:700}
+.hud .top span:last-child{color:var(--muted);font-weight:500}
+.stepper{position:absolute;left:22px;right:22px;top:42px;height:46px;background:#F4F1EA;border:2px solid var(--ink);border-radius:14px;display:flex;align-items:center;justify-content:space-between;padding:0 7px}
+.stepper .b{width:30px;height:30px;border-radius:50%;background:#fff;border:2px solid var(--ink);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:18px;line-height:1;padding:0}
+.stepper .b:disabled{opacity:.35;cursor:not-allowed}
+.stepper .v{font-size:17px;font-weight:700}
+.stepper .v small{font-weight:500;color:var(--sub);font-size:15px}
+.hud .big{position:absolute;left:22px;top:102px;font-family:'Fraunces',Georgia,serif;font-weight:640;font-size:58px;line-height:1;letter-spacing:-1.5px;font-variation-settings:'opsz' 72;color:var(--yarn)}
+.hud .bigl{position:absolute;left:104px;top:112px;display:flex;flex-direction:column;gap:3px}
+.hud .bigl b{font-size:15px}
+.hud .bigl span{font-size:13px;color:var(--muted);font-weight:550}
+.hud .ball{position:absolute;left:214px;top:94px;width:88px;height:88px}
+.hud .bar{position:absolute;left:24px;top:190px;width:270px;height:16px}
+.hud .foot{position:absolute;left:24px;top:218px;font-size:12.5px;color:var(--muted);font-weight:550}
+.tip{position:absolute;z-index:9;padding:14px 20px 16px;pointer-events:none;width:300px;transition:opacity .12s}
+.tip h4{margin:0 0 4px;font-family:'Fraunces',Georgia,serif;font-weight:640;font-size:19px}
+.tip p{margin:0;font-size:14px;line-height:1.45;color:var(--sub)}
+.hidden{opacity:0;visibility:hidden}
+.toast{z-index:8;left:30px;top:880px;width:440px;min-height:88px;padding:16px 20px 16px 104px;transition:opacity .2s,transform .2s}
+.toast.hidden{transform:translateY(10px)}
+.toast.bad{border-color:var(--berry);box-shadow:4px 5px 0 var(--berry)}
+.toast svg{position:absolute;left:16px;top:6px}
+.toast h4{margin:0 0 4px;font-family:'Fraunces',Georgia,serif;font-weight:640;font-size:19px}
+.toast.bad h4{color:var(--berry)}
+.toast p{margin:0;font-size:14px;line-height:1.4;color:var(--sub)}
+/* postcard note */
+.pcard{width:470px;display:grid;grid-template-columns:1fr 146px;border-radius:8px;z-index:5;padding:0}
+.pcard .pl{padding:20px 18px 16px 24px}
+.pcard .pr{border-left:1.5px solid #D8CFBB;position:relative;margin:16px 0}
+.pcard .pr svg{position:absolute;left:0;top:0;width:146px;height:100%}
+.pcard .k{font-size:13px;color:var(--muted);font-weight:650}
+.pcard h4{font-family:'Fraunces',Georgia,serif;font-style:italic;font-weight:680;font-size:26px;margin:2px 0 12px}
+.pcard label{display:block;font-size:13px;font-weight:650;margin:0 0 6px}
+.pcard input,.pcard textarea{width:100%;background:#FBF8F1;border:0;border-bottom:2px solid #CFC5AE;border-radius:4px 4px 0 0;padding:8px 6px;font:inherit;font-size:14.5px;color:var(--ink);margin:0 0 12px;resize:none}
+.pcard input[data-f="link"]{color:#2E5A73}
+.pcard input:focus,.pcard textarea:focus{outline:none;border-bottom-color:var(--yarn);background:#fff}
+.pcard .sv{font-size:12.5px;color:var(--leaf);font-weight:650;min-height:16px}
+.pcard .min{position:absolute;right:12px;top:12px;z-index:2;width:30px;height:30px;border-radius:50%;border:2px solid var(--ink);background:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:17px;padding:0}
+/* hint */
+.hint{left:1066px;top:742px;width:344px;padding:18px 22px 18px;font-size:14px;line-height:1.5;color:var(--sub);z-index:4}
+.hint h4{margin:0 0 6px;font-family:'Fraunces',Georgia,serif;font-weight:640;font-size:18px;color:var(--ink)}
+.hint ol{margin:0 0 12px;padding-left:18px}
+.hint button{height:34px;padding:0 14px;border:2px solid var(--ink);border-radius:10px;background:#fff;box-shadow:2px 3px 0 var(--ink);font-weight:650;font-size:13.5px}
+.hint .x{position:absolute;right:14px;top:12px;width:28px;height:28px;border-radius:50%;padding:0;box-shadow:none}
+.hint.closed{display:none}
+.helpbtn{position:absolute;left:1360px;top:940px;width:44px;height:44px;border-radius:50%;border:2.5px solid var(--ink);background:#fff;box-shadow:3px 4px 0 var(--ink);font-weight:800;font-size:18px;display:none}
+.helpbtn.show{display:block}
+/* ticket screen */
+#tix{position:absolute;inset:0;z-index:20;background-color:#E3ECE9;background-image:linear-gradient(#D3DFDB 1px,transparent 1px),linear-gradient(90deg,#D3DFDB 1px,transparent 1px);background-size:160px 125px;
+  transition:opacity .45s,transform .45s,visibility 0s 0s}
+#tix.gone{opacity:0;transform:translateY(-28px);visibility:hidden;pointer-events:none;transition:opacity .45s,transform .45s,visibility 0s .45s}
+#tix .brand{cursor:default}
+#tix .back{position:absolute;left:236px;top:44px;font-size:15px;font-weight:550;color:var(--sub)}
+.ticket{position:absolute;left:220px;top:206px;width:1007px;height:568px}
+.ticket>svg.shape{position:absolute;left:0;top:0}
+.tmain{position:absolute;left:0;top:0;width:720px;height:560px;padding:40px 46px}
+.tmain h1{margin:0;font-family:'Fraunces',Georgia,serif;font-weight:660;font-size:42px;letter-spacing:-.6px;font-variation-settings:'opsz' 72}
+.tmain .sub{margin:4px 0 0;font-size:16.5px;color:var(--sub)}
+.place{position:absolute;top:150px;width:190px;height:122px}
+.place.from{left:46px}
+.place.to{right:46px;text-align:right}
+.place .lab{font-size:14px;color:var(--muted);font-weight:650}
+.place .code{font-family:'Fraunces',Georgia,serif;font-weight:700;font-size:68px;line-height:1;letter-spacing:1px;margin-top:4px}
+.place .city{font-size:18px;font-weight:650;margin-top:4px;display:flex;align-items:center;gap:6px}
+.place.to .city{justify-content:flex-end}
+.place select{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;font-size:16px}
+.place:hover .code{color:#B8401F}
+.yline{position:absolute;left:226px;top:142px;width:268px;height:130px;pointer-events:none}
+.ticket.dest .from,.ticket.dest .yline{display:none}
+.ticket.dest .place.to{left:46px;right:auto;text-align:left;width:360px}
+.ticket.dest .place.to .city{justify-content:flex-start}
+.destnote{position:absolute;left:330px;top:205px;font-size:15px;color:var(--sub);display:none;width:330px;line-height:1.45}
+.ticket.dest .destnote{display:block}
+.seg{position:absolute;left:46px;top:300px;width:440px;height:52px;border:2px solid var(--ink);border-radius:14px;background:#F4F1EA;display:flex;padding:4px;gap:6px}
+.seg button{flex:1;border:0;background:none;border-radius:10px;font-size:15.5px;font-weight:600;color:var(--sub)}
+.seg button.on{background:#fff;border:2px solid var(--ink);box-shadow:2px 3px 0 var(--ink);color:var(--ink)}
+.fields{position:absolute;left:46px;top:382px;width:628px;display:grid;grid-template-columns:1fr 290px;gap:20px}
+.fields label{display:block;font-size:14px;font-weight:650;margin-bottom:8px}
+.fields .in{width:100%;height:56px;border:2px solid var(--ink);border-radius:12px;background:#F4F1EA;padding:0 16px;font:inherit;font-size:17px;color:var(--ink)}
+.fields .in:focus{outline:3px solid var(--sun);outline-offset:1px;background:#fff}
+.dur{height:56px;border:2px solid var(--ink);border-radius:12px;background:#F4F1EA;display:flex;align-items:center;justify-content:space-between;padding:0 8px}
+.dur .cb{width:36px;height:36px;border-radius:50%;border:2.2px solid var(--ink);background:#fff;font-size:20px;font-weight:800;display:flex;align-items:center;justify-content:center;padding:0}
+.dur .cb:disabled{opacity:.35;cursor:not-allowed}
+.dur .mid{display:flex;align-items:center;gap:8px}
+.dur .n{font-family:'Fraunces',Georgia,serif;font-weight:700;font-size:28px}
+.dur .u{font-size:15px;color:var(--sub);margin-top:6px}
+.help{font-size:13px;color:var(--muted);margin-top:8px}
+.tstub{position:absolute;left:722px;top:0;width:278px;height:560px;text-align:center}
+.tstub .bars{position:absolute;left:38px;top:36px}
+.tstub .kit{position:absolute;left:70px;top:92px}
+.tstub .ready{position:absolute;left:0;right:0;top:250px;font-size:14px;color:var(--muted);font-weight:600}
+.tstub .days{position:absolute;left:0;right:0;top:272px;font-family:'Fraunces',Georgia,serif;font-weight:700;font-size:46px;line-height:1.1}
+.tstub .rcode{position:absolute;left:0;right:0;top:332px;font-size:16px;font-weight:700;letter-spacing:1px}
+.tstub .err{position:absolute;left:20px;right:20px;top:368px;font-size:13.5px;color:var(--berry);font-weight:650;min-height:18px}
+.go{position:absolute;left:44px;top:430px;width:190px;height:62px;border:2.5px solid var(--ink);border-radius:16px;background:var(--sun);box-shadow:4px 5px 0 var(--ink);font-weight:800;font-size:19px;display:flex;align-items:center;justify-content:center;gap:10px}
+.go:disabled{opacity:.45;cursor:not-allowed}
+/* motion */
+#banner .conf,#banner .rib,.spk,.pop,.wob,.cheer{transform-box:fill-box}
+#banner .conf{transform-origin:center}
+#banner.go2 .conf{animation:fall .9s cubic-bezier(.2,.8,.3,1) both}
+@keyframes fall{from{transform:translateY(-60px) rotate(0deg);opacity:0}to{transform:none;opacity:1}}
+#banner .rib{transform-origin:center}
+#banner.go2 .rib{animation:popin .45s cubic-bezier(.3,1.6,.5,1) both}
+@keyframes popin{from{transform:scale(.6);opacity:0}to{transform:none;opacity:1}}
+.spk{transform-origin:center;animation:spk 1.1s ease-out both}
+@keyframes spk{0%{transform:scale(0);opacity:0}30%{transform:scale(1.2);opacity:1}100%{transform:scale(.8);opacity:0}}
+.pop{transform-origin:50% 100%;animation:hop .38s cubic-bezier(.3,1.7,.5,1)}
+@keyframes hop{0%{transform:translateY(0) scale(1,1)}35%{transform:translateY(-10px) scale(.94,1.06)}100%{transform:none}}
+.wob{transform-origin:50% 100%;animation:wob 1.5s ease-in-out infinite}
+@keyframes wob{0%,100%{transform:rotate(-7deg)}50%{transform:rotate(7deg)}}
+.cheer{transform-origin:50% 100%;animation:cheer .9s ease-in-out infinite}
+@keyframes cheer{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
+@media (prefers-reduced-motion:reduce){.hud.shake,#banner.go2 .conf,#banner.go2 .rib,.spk,.pop,.wob,.cheer{animation:none}.toast,.tip,#tix{transition:none}}
+</style>
+</head>
+<body>
+<div id="vp">
+<div id="stage">
+  <svg id="map" width="1440" height="1000" viewBox="0 0 1440 1000" role="application" aria-label="Trip map. Drag the yarn to add stops, drag a stop’s knitting needle to change days.">
+    <g id="base"></g><g id="dyn"></g><g id="kit" pointer-events="none"></g><g id="fx" pointer-events="none"></g><g id="banner" pointer-events="none"></g>
+  </svg>
+  <svg id="threads" width="1440" height="1000" viewBox="0 0 1440 1000"></svg>
+  <button class="brand" id="brand" aria-label="slackline, start a new trip"><svg class="bc" width="46" height="50" viewBox="-26 -36 52 60" aria-hidden="true"></svg><span class="wm">slackline</span></button>
+  <div class="divider"></div>
+  <div class="trip">
+    <div class="row1"><input class="tname" id="tname" aria-label="Trip name" value="Iberian escape"><button class="pencil" id="pencil" aria-label="Rename trip"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 13 L3.6 10 L11 2.6 L13.4 5 L6 12.4 Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg></button></div>
+    <div class="mroute" id="mroute"></div>
+  </div>
+  <button class="notesbtn" id="notesBtn" aria-pressed="false"><svg width="18" height="14" viewBox="0 0 18 14" aria-hidden="true"><rect x="1" y="1" width="16" height="12" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M9 3 V11" stroke="currentColor" stroke-width="1.2"/><rect x="11.5" y="3" width="3.5" height="4" fill="currentColor"/><path d="M3 5 H7 M3 8 H7" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg><span>Show notes</span></button>
+  <div class="card hud" id="hud">
+    <div class="top"><span>Day budget</span><span>Trip length</span></div>
+    <div class="stepper"><button class="b" id="minus" aria-label="Remove a day from the trip">−</button><div class="v"><span id="total">22</span> <small>days</small></div><button class="b" id="plus" aria-label="Add a day to the trip">+</button></div>
+    <div class="big" id="left">20</div>
+    <div class="bigl"><b id="leftl">days left</b><span id="planned">2 planned</span></div>
+    <svg class="ball" id="ball" viewBox="0 0 88 88" aria-hidden="true"></svg>
+    <svg class="bar" id="bar" viewBox="0 0 270 16" aria-hidden="true"></svg>
+    <div class="foot" id="foot"></div>
+  </div>
+  <div class="card tip hidden" id="tip"><h4></h4><p></p></div>
+  <div id="cards"></div>
+  <div class="card toast hidden" id="toast" role="status" aria-live="polite"><svg width="80" height="76" viewBox="0 0 80 76" aria-hidden="true"></svg><h4></h4><p></p></div>
+  <div class="card hint" id="hint">
+    <button class="x" id="hintX" aria-label="Close tips">×</button>
+    <h4>Try it</h4>
+    <ol><li>Drag the yarn and drop it on a lit pin to add a stop.</li><li>Click a yarn ball, then drag its needle to change days.</li><li>Use − and + to change the trip length.</li><li>Show notes, then click a postcard to write on it.</li></ol>
+    <button id="reset">Start over</button>
+  </div>
+  <button class="helpbtn" id="helpBtn" aria-label="Show tips">?</button>
+
+  <div id="tix">
+    <div class="brand"><svg class="bc" width="46" height="50" viewBox="-26 -36 52 60" aria-hidden="true"></svg><span class="wm">slackline</span></div>
+    <div class="back">← Your trips</div>
+    <div class="ticket" id="ticket">
+      <svg class="shape" width="1007" height="568" viewBox="0 0 1007 568" aria-hidden="true">
+        <path d="M24 1.25 H702 A18 18 0 0 0 738 1.25 H976 Q998.75 1.25 998.75 24 V536 Q998.75 558.75 976 558.75 H738 A18 18 0 0 0 702 558.75 H24 Q1.25 558.75 1.25 536 V24 Q1.25 1.25 24 1.25 Z" fill="#22302A" transform="translate(6,7)"/>
+        <path d="M24 1.25 H702 A18 18 0 0 0 738 1.25 H976 Q998.75 1.25 998.75 24 V536 Q998.75 558.75 976 558.75 H738 A18 18 0 0 0 702 558.75 H24 Q1.25 558.75 1.25 536 V24 Q1.25 1.25 24 1.25 Z" fill="#FFFFFF" stroke="#22302A" stroke-width="2.5"/>
+        <path d="M720 30 V530" stroke="#22302A" stroke-width="2" stroke-dasharray="5 6"/>
+        <path d="M702 1.25 A18 18 0 0 0 738 1.25 Z M738 558.75 A18 18 0 0 0 702 558.75 Z" fill="#E3ECE9"/><path d="M702 1.25 A18 18 0 0 0 738 1.25 M738 558.75 A18 18 0 0 0 702 558.75" fill="none" stroke="#22302A" stroke-width="2.5"/>
+      </svg>
+      <div class="tmain">
+        <h1>New trip</h1>
+        <p class="sub">A few details, then make the map your own.</p>
+        <div class="place from"><div class="lab">From</div><div class="code" id="fromCode">LIS</div><div class="city"><span id="fromName">Lisbon</span><svg width="12" height="8" viewBox="0 0 12 8" aria-hidden="true"><path d="M1 1 L6 6 L11 1" fill="none" stroke="currentColor" stroke-width="2"/></svg></div><select id="fromSel" aria-label="Start city"></select></div>
+        <svg class="yline" id="yline" viewBox="0 0 268 130" aria-hidden="true"></svg>
+        <div class="place to"><div class="lab" id="toLab">To</div><div class="code" id="toCode">BCN</div><div class="city"><span id="toName">Barcelona</span><svg width="12" height="8" viewBox="0 0 12 8" aria-hidden="true"><path d="M1 1 L6 6 L11 1" fill="none" stroke="currentColor" stroke-width="2"/></svg></div><select id="toSel" aria-label="Destination city"></select></div>
+        <div class="destnote">Start with one place. Pull the loose yarn on the map to add the rest of your route.</div>
+        <div class="seg" role="group" aria-label="Where are you headed?"><button id="modeSE" class="on" aria-pressed="true">Start &amp; end</button><button id="modeD" aria-pressed="false">One destination</button></div>
+        <div class="fields">
+          <div><label for="tTripName">Trip name</label><input class="in" id="tTripName" value="Iberian escape"></div>
+          <div><label>Trip length</label><div class="dur"><button class="cb" id="tMinus" aria-label="Fewer days">−</button><div class="mid"><svg id="tBall" width="44" height="44" viewBox="0 0 44 44" aria-hidden="true"></svg><span class="n" id="tDays">22</span><span class="u">days</span></div><button class="cb" id="tPlus" aria-label="More days">+</button></div><div class="help">2–90 days · travel is part of each stop’s days.</div></div>
+        </div>
+      </div>
+      <div class="tstub">
+        <svg class="bars" width="202" height="30" viewBox="0 0 202 30" id="bars" aria-hidden="true"></svg>
+        <svg class="kit" width="150" height="140" viewBox="-66 -82 150 140" id="tKit" aria-hidden="true"></svg>
+        <div class="ready">Ready to plan</div>
+        <div class="days" id="sDays">22 days</div>
+        <div class="rcode" id="sRoute">LIS → BCN</div>
+        <div class="err" id="sErr" role="alert"></div>
+        <button class="go" id="go">Start trip <svg width="20" height="16" viewBox="0 0 20 16" aria-hidden="true"><path d="M2 8 H17 M11 2 L17 8 L11 14" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+<script>
+const INK='#22302A',YARN='#E4572E',YARNL='#FFB59A',YARND='#B8401F',SUN='#FFC93C',LEAF='#2F8F6B',LEAFL='#A9DCC5',LEAFD='#1E6B4F',BERRY='#D7385E',MUTED='#7A7466';
+const FR="Fraunces, Georgia, serif", FT="Figtree, system-ui, sans-serif";
+const CITIES={Lisbon:{x:262,y:786,lab:'below',code:'LIS'},Coimbra:{x:323,y:601,lab:'left',code:'COI'},Porto:{x:309,y:483,lab:'left',code:'OPO'},Salamanca:{x:560,y:505,lab:'above',code:'SLM'},
+  Madrid:{x:729,y:575,lab:'below',code:'MAD'},Barcelona:{x:1234,y:449,lab:'below',code:'BCN'},Zaragoza:{x:974,y:416,lab:'above',code:'ZAZ'},Valencia:{x:1026,y:700,lab:'below',code:'VLC'},
+  Bilbao:{x:798,y:262,lab:'above',code:'BIO'},Seville:{x:540,y:905,lab:'above',code:'SVQ'}};
+const REACH=380, SNAP=72;
+
+/* ---------- art ---------- */
+const BALLCAT=`<path d="M-17 -12 L-14 -31 L-3 -19Z M3 -19 L14 -31 L17 -12Z" fill="${YARN}" stroke="${INK}" stroke-width="2.6" stroke-linejoin="round"/><path d="M-13.5 -15 L-12.5 -25 L-6.5 -18.5Z M6.5 -18.5 L12.5 -25 L13.5 -15Z" fill="#F59A9A"/><circle r="22" fill="${YARN}" stroke="${INK}" stroke-width="2.8"/><path d="M-17 -8 C-7 -15 7 -15 17 -8 M-20.5 2 C-9 -6 9 -6 20.5 2 M-17 11 C-6 5 6 5 17 11" fill="none" stroke="${YARNL}" stroke-width="1.7"/><path d="M-8.5 -1 q3 -3.5 6 0 M2.5 -1 q3 -3.5 6 0" fill="none" stroke="${INK}" stroke-width="2.2" stroke-linecap="round"/><ellipse cx="-9" cy="5" rx="2.6" ry="1.5" fill="#F59A9A"/><ellipse cx="9" cy="5" rx="2.6" ry="1.5" fill="#F59A9A"/><path d="M15 15 C24 22 20 30 12 30" fill="none" stroke="${YARN}" stroke-width="2.6" stroke-linecap="round"/>`;
+document.querySelectorAll('svg.bc').forEach(s=>s.innerHTML=BALLCAT);
+const SIL=`<ellipse cx="0" cy="6" rx="12" ry="11"/><circle cx="9" cy="-12" r="12.5"/><path d="M-1 -20 L1 -33 L9 -23Z M11 -23 L19 -33 L20 -18Z"/>`;
+const SIL_T=`<ellipse cx="0" cy="6" rx="12" ry="11"/><circle cx="9" cy="-12" r="12.5"/><path d="M-2 -20 L0 -37 L9 -23Z M11 -23 L20 -37 L21 -18Z"/>`;
+const EYES={
+ o:`<circle cx="4.5" cy="-13" r="2.8" fill="#fff"/><circle cx="14" cy="-13" r="2.8" fill="#fff"/><circle cx="5.2" cy="-12.4" r="1.4" fill="${INK}"/><circle cx="14.7" cy="-12.4" r="1.4" fill="${INK}"/>`,
+ s:`<circle cx="4.5" cy="-13" r="3.4" fill="#fff"/><circle cx="14" cy="-13" r="3.4" fill="#fff"/><circle cx="5.3" cy="-12.6" r="1.7" fill="${INK}"/><circle cx="14.8" cy="-12.6" r="1.7" fill="${INK}"/><circle cx="4.5" cy="-14.2" r=".7" fill="#fff"/><circle cx="14" cy="-14.2" r=".7" fill="#fff"/><path d="M7.6 -7.8 q1.7 2.8 3.4 0Z" fill="#F59A9A"/>`,
+ h:`<path d="M2 -12.5 q2.5 -3.5 5 0 M11.5 -12.5 q2.5 -3.5 5 0" fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/><path d="M7 -7.8 q1 1.3 2 0 q1 1.3 2 0" fill="none" stroke="#fff" stroke-width="1"/>`,
+ w:`<circle cx="4.5" cy="-12.5" r="3.1" fill="#fff"/><circle cx="14" cy="-12.5" r="3.1" fill="#fff"/><circle cx="4.5" cy="-12.3" r="1" fill="${INK}"/><circle cx="14" cy="-12.3" r="1" fill="${INK}"/><path d="M1.5 -16.5 L7 -18.5 M17 -16.5 L11.5 -18.5" stroke="#fff" stroke-width="1.2" stroke-linecap="round"/><path d="M6.5 -6.5 q1 -1 2 0 q1 1 2 0 q1 -1 2 0" fill="none" stroke="#fff" stroke-width="1"/>`,
+ l:`<path d="M1.7 -13 a2.8 2.8 0 0 0 5.6 0Z M11.2 -13 a2.8 2.8 0 0 0 5.6 0Z" fill="#fff"/><circle cx="5" cy="-11.9" r="1.2" fill="${INK}"/><circle cx="14.5" cy="-11.9" r="1.2" fill="${INK}"/><path d="M1.5 -16 L7.5 -15 M17.5 -16 L11.5 -15" stroke="#fff" stroke-width="1.1" stroke-linecap="round"/>`,
+ no:`<path d="M2.5 -15.5 l3.5 2.5 l-3.5 2.5 M16 -15.5 l-3.5 2.5 l3.5 2.5" fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M7 -6 q2 -1.8 4 0" fill="none" stroke="#fff" stroke-width="1.2" stroke-linecap="round"/>`,
+ big:`<circle cx="4.5" cy="-13" r="3.8" fill="#fff"/><circle cx="14" cy="-13" r="3.8" fill="#fff"/><circle cx="4.5" cy="-13" r="1.9" fill="${INK}"/><circle cx="14" cy="-13" r="1.9" fill="${INK}"/><circle cx="9.5" cy="-6.3" r="1.4" fill="#fff"/>`};
+const BLUSH=`<ellipse cx="2.5" cy="-6.5" rx="2.6" ry="1.5" fill="#F59A9A"/><ellipse cx="17" cy="-6.5" rx="2.6" ry="1.5" fill="#F59A9A"/>`;
+const PAWS=`<ellipse cx="5" cy="17" rx="5" ry="3" fill="#3C4C45"/><ellipse cx="13" cy="17" rx="5" ry="3" fill="#3C4C45"/>`;
+const STAR=`M0 -6 L1.5 -1.5 L6 0 L1.5 1.5 L0 6 L-1.5 1.5 L-6 0 L-1.5 -1.5Z`;
+function catSVG(m){
+  const up=['happy','celebrate','yay','eager'].includes(m);
+  const tail=m==='oops'?'M-12 8 Q-25 -2 -21 -18':up?'M-11 6 Q-25 -4 -19 -22 Q-16 -29 -10 -26':m==='wobbly'?'M-12 8 Q-28 4 -30 -6':'M-12 10 Q-27 6 -22 -9';
+  const tw=m==='oops'?7:4.5, sil=(m==='oops'||m==='eager')?SIL_T:SIL;
+  const eyes={wobbly:EYES.w,steady:EYES.o,happy:EYES.h,celebrate:EYES.h,yay:EYES.h,focus:EYES.l,no:EYES.no,oops:EYES.big,eager:EYES.s}[m]||EYES.o;
+  let s=`<path d="${tail}" fill="none" stroke="#fff" stroke-width="${tw+5}" stroke-linecap="round"/><g fill="#fff" stroke="#fff" stroke-width="6" stroke-linejoin="round">${sil}</g>`+
+    `<path d="${tail}" fill="none" stroke="${INK}" stroke-width="${tw}" stroke-linecap="round"/><g fill="${INK}">${sil}</g>`+
+    (m!=='oops'?`<path d="M1 -24 L1.5 -31 L6 -24.5Z M13 -24.5 L18 -31 L18.5 -22Z" fill="#E98A8A" opacity=".75"/>`:'')+eyes+(['happy','celebrate','yay','steady','focus','eager'].includes(m)?BLUSH:'')+PAWS;
+  if(m==='wobbly') s+=`<ellipse cx="-11" cy="-1" rx="5.5" ry="2.8" fill="#3C4C45" transform="rotate(-20 -11 -1)"/><ellipse cx="25" cy="-2" rx="5.5" ry="2.8" fill="#3C4C45" transform="rotate(20 25 -2)"/><path d="M27 -26 q-3 4 0 6 q3 -2 0 -6Z" fill="#7CC7E8" stroke="${INK}" stroke-width=".8"/>`;
+  if(m==='celebrate') s+=`<ellipse cx="-7" cy="-7" rx="5.5" ry="2.8" fill="#3C4C45" transform="rotate(-60 -7 -7)"/><ellipse cx="25" cy="-9" rx="5.5" ry="2.8" fill="#3C4C45" transform="rotate(60 25 -9)"/>`;
+  if(m==='eager') s+=`<circle cx="27" cy="11" r="8" fill="${YARN}" stroke="${INK}" stroke-width="1.5"/><path d="M21 8 Q27 4 33 8 M20 13 Q27 9 34 13" fill="none" stroke="${YARNL}" stroke-width="1"/><ellipse cx="19" cy="5" rx="5" ry="3" fill="#3C4C45" transform="rotate(-30 19 5)"/><path d="${STAR}" transform="translate(-6,-38) scale(.6)" fill="${SUN}" stroke="${INK}" stroke-width="1"/><path d="${STAR}" transform="translate(28,-30) scale(.5)" fill="${SUN}" stroke="${INK}" stroke-width="1"/>`;
+  if(m==='no') s+=`<path d="M-6 -22 q-4 6 0 12 M-10 -24 q-5 8 0 16 M26 -22 q4 6 0 12 M30 -24 q5 8 0 16" fill="none" stroke="${BERRY}" stroke-width="1.6" stroke-linecap="round"/>`;
+  if(m==='oops') s+=`<text x="21" y="-30" font-family="${FR}" font-weight="700" font-size="14" fill="#E0A100">!</text>`;
+  if(m==='yay') s+=`<path d="${STAR}" transform="translate(-12,-30) scale(.7)" fill="${SUN}" stroke="${INK}" stroke-width="1"/><path d="${STAR}" transform="translate(30,-26) scale(.6)" fill="${SUN}" stroke="${INK}" stroke-width="1"/>`;
+  return s;
+}
+function yarnBall(x,y,r,green){const s=r/20,f=green?LEAF:YARN,l=green?LEAFL:YARNL,d=green?LEAFD:YARND;
+  return `<g transform="translate(${x},${y}) scale(${s})"><circle r="20" fill="${f}" stroke="${INK}" stroke-width="3" vector-effect="non-scaling-stroke"/><path d="M-15 -10 C-6 -17 7 -17 15 -10 M-19 -1 C-8 -9 8 -9 19 -1 M-17 8 C-6 2 6 2 17 8 M-10 15.5 C-3 12 3 12 10 15.5" fill="none" stroke="${l}" stroke-width="1.8" vector-effect="non-scaling-stroke"/><path d="M-6 -19 C-15 -7 -15 7 -6 19 M5 -19.5 C13 -8 13 8 5 19.5" fill="none" stroke="${d}" stroke-width="1.4" vector-effect="non-scaling-stroke"/></g>`}
+function sparkle(x,y,s,d){return `<g transform="translate(${x},${y}) scale(${s})"><path class="spk" style="animation-delay:${d}s" d="M0 -9 L2.2 -2.2 L9 0 L2.2 2.2 L0 9 L-2.2 2.2 L-9 0 L-2.2 -2.2Z" fill="${SUN}" stroke="${INK}" stroke-width="1.2"/></g>`}
+const FLAG_G=(x,top)=>`<path d="M${x} ${top+30} V${top}" stroke="${INK}" stroke-width="2.6" stroke-linecap="round"/><path d="M${x} ${top} L${x-20} ${top+7} L${x} ${top+14}Z" fill="${LEAF}" stroke="${INK}" stroke-width="2" stroke-linejoin="round"/>`;
+const FLAG_F=(x,top)=>`<path d="M${x} ${top+30} V${top}" stroke="${INK}" stroke-width="2.6" stroke-linecap="round"/><rect x="${x}" y="${top}" width="22" height="14" fill="#fff" stroke="${INK}" stroke-width="2"/><path d="M${x} ${top}h5.5v7h-5.5Z M${x+11} ${top}h5.5v7h-5.5Z M${x+5.5} ${top+7}h5.5v7h-5.5Z M${x+16.5} ${top+7}h5.5v7h-5.5Z" fill="${INK}"/>`;
+
+/* ---------- calm base map ---------- */
+const LAND="M 300 205 C 340 180, 400 170, 440 178 C 520 192, 640 196, 720 205 C 800 214, 880 222, 960 236 L 975 236 C 990 180, 985 100, 965 0 L 1440 0 L 1440 372 C 1400 368, 1360 360, 1325 368 C 1300 380, 1285 400, 1268 420 C 1252 440, 1240 452, 1225 470 C 1180 520, 1120 570, 1085 625 C 1060 665, 1040 700, 1048 735 C 1062 770, 1095 790, 1080 820 C 1050 870, 1010 930, 985 1000 L 250 1000 C 245 960, 238 920, 246 880 C 252 850, 236 820, 238 800 C 240 770, 225 740, 240 700 C 255 660, 262 620, 268 580 C 275 540, 282 505, 284 470 C 286 420, 278 360, 284 300 C 288 260, 280 230, 300 205 Z";
+(function(){let g='';for(let x=160;x<1440;x+=160)g+=`M${x} 0 V1000 `;for(let y=125;y<1000;y+=125)g+=`M0 ${y} H1440 `;
+document.getElementById('base').innerHTML=`<rect width="1440" height="1000" fill="#E3ECE9"/><path d="${g}" stroke="#D3DFDB" stroke-width="1"/>
+ <path d="${LAND}" fill="#F8F5EE" stroke="#C4BBA6" stroke-width="1.6"/>
+ <path d="M 970 238 C 1060 272, 1180 304, 1298 382" fill="none" stroke="#D2C8B1" stroke-width="1.6"/>
+ <path d="M 360 262 C 372 300, 350 330, 382 360 C 405 395, 400 440, 392 480 C 385 530, 412 560, 420 600 C 428 650, 392 690, 400 740 C 410 790, 440 820, 430 880 C 422 930, 400 960, 398 1000" fill="none" stroke="#D2C8B1" stroke-width="1.6"/>
+ <g font-family="${FR}" font-style="italic" fill="#8EA7A1"><text font-size="19"><tspan x="60" y="500">Atlantic</tspan><tspan x="60" y="524">Ocean</tspan></text><text x="1214" y="842" font-size="19">Mediterranean Sea</text><text x="560" y="112" font-size="19">Bay of Biscay</text></g>
+ <g font-family="${FR}" font-style="italic" fill="#BDB298" letter-spacing="4"><text x="318" y="968" font-size="21">Portugal</text><text x="800" y="770" font-size="24">Spain</text><text x="1150" y="400" font-size="21">France</text></g>`})();
+
+/* ---------- state ---------- */
+const T={mode:'se',from:'Lisbon',to:'Barcelona',days:22,name:'Iberian escape'};
+const NOTE_SEED={'s:Coimbra':{link:'https://hostel.cool/coimbra',remember:'Check-in after 15:00.'}};
+let S;
+function fresh(){S={total:T.days,mode:T.mode,name:T.name,stops:T.mode==='se'?[{name:T.from,days:1},{name:T.to,days:1}]:[{name:T.to,days:1}],
+  sel:null,drag:null,hover:null,notesOn:false,notes:JSON.parse(JSON.stringify(NOTE_SEED)),open:[],ghost:null,wasFull:false,handleA:45,tagPos:{},react:null,legs:[]}}
+fresh();
+const spent=()=>S.stops.reduce((a,s)=>a+s.days,0);
+const leftD=()=>S.total-spent();
+const R=d=>Math.min(12+5*d,72);
+const dFromR=r=>(r-12)/5;
+const pos=s=>s.tmp?{x:s.x,y:s.y}:CITIES[s.name];
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const hasNote=k=>{const n=S.notes[k];return !!n&&Object.values(n).some(v=>v&&v.trim())};
+const booked=k=>{const n=S.notes[k];return !!(n&&n.link&&n.link.trim())};
+const plural=(n,w)=>`${n} ${w}${n===1?'':'s'}`;
+function leg(A,B){const dx=B.x-A.x,dy=B.y-A.y,len=Math.hypot(dx,dy)||1;let nx=-dy/len,ny=dx/len;if(ny<0){nx=-nx;ny=-ny}
+  const L=leftD(),slack=clamp(L/S.total,0,1);const sag=L<=0?0:len*(0.03+0.25*slack);
+  return {A,B,C:{x:(A.x+B.x)/2+nx*2*sag,y:(A.y+B.y)/2+ny*2*sag}}}
+function tailPoint(p,r){const dx=p.x>1100?-1:1;let x=p.x+dx*(r+130),y=p.y+(r+60)*.55;if(y>930)y=p.y-(r+80);return {x:clamp(x,50,1390),y:clamp(y,140,950)}}
+function buildLegs(){const L=[],n=S.stops.length;for(let i=0;i<n-1;i++)L.push(leg(pos(S.stops[i]),pos(S.stops[i+1])));
+  if(S.mode==='dest'){const s=S.stops[n-1],p=pos(s);const g=leg(p,tailPoint(p,R(s.days)));g.tail=true;L.push(g)}return L}
+const qp=(g,t)=>({x:(1-t)*(1-t)*g.A.x+2*(1-t)*t*g.C.x+t*t*g.B.x,y:(1-t)*(1-t)*g.A.y+2*(1-t)*t*g.C.y+t*t*g.B.y});
+function nearest(g,p){let best={d:1e9};for(let t=0;t<=1.0001;t+=0.01){const q=qp(g,t),d=Math.hypot(q.x-p.x,q.y-p.y);if(d<best.d)best={d,t,...q}}return best}
+const halo=(x,y,txt,anc,w,size,fill)=>`<text x="${x}" y="${y}" text-anchor="${anc}" font-family="${FT}" font-weight="${w}" font-size="${size}" fill="${fill}" stroke="#F8F5EE" stroke-width="4" stroke-linejoin="round" paint-order="stroke" pointer-events="none">${txt}</text>`;
+const isEnd=i=>S.mode==='se'&&i===S.stops.length-1;
+
+/* ---------- render ---------- */
+const $=id=>document.getElementById(id);
+const dyn=$('dyn');
+function render(){
+  const L=leftD(), full=L<=0, dr=S.drag, n=S.stops.length;
+  let h='';
+  const inRoute=new Set(S.stops.filter(s=>!s.tmp).map(s=>s.name));
+  if(dr&&dr.type==='pull') h+=`<circle cx="${dr.origin.x}" cy="${dr.origin.y}" r="${REACH}" fill="${YARN}" fill-opacity=".04" stroke="${YARN}" stroke-width="1.8" stroke-dasharray="2 8" stroke-linecap="round" pointer-events="none"/>`;
+  // cities: dots normally, sewing pins while pulling
+  for(const [nm,c] of Object.entries(CITIES)){ if(inRoute.has(nm))continue;
+    const pulling=dr&&dr.type==='pull',ok=pulling&&Math.hypot(c.x-dr.origin.x,c.y-dr.origin.y)<=REACH,snap=pulling&&dr.snap===nm;
+    if(snap)continue;
+    if(ok){h+=`<path d="M${c.x} ${c.y-20} L${c.x} ${c.y}" stroke="#8C8676" stroke-width="2.4" stroke-linecap="round" pointer-events="none"/><circle cx="${c.x}" cy="${c.y-20}" r="15" fill="${SUN}" fill-opacity=".35" pointer-events="none"/><circle cx="${c.x}" cy="${c.y-20}" r="8" fill="${SUN}" stroke="${INK}" stroke-width="2.4" pointer-events="none"/><circle cx="${c.x-2.5}" cy="${c.y-22.5}" r="2.2" fill="#fff" pointer-events="none"/>`+halo(c.x+14,c.y-16,nm,'start',700,13.5,INK)}
+    else{h+=`<circle cx="${c.x}" cy="${c.y}" r="3.8" fill="#A39B88" pointer-events="none"/>`+halo(c.x+9,c.y+4.5,nm,'start',450,13,'#8C8676')}
+  }
+  if(dr&&dr.type==='pull'&&dr.snap){const c=CITIES[dr.snap];h+=`<circle cx="${c.x}" cy="${c.y}" r="${R(1)+14}" fill="${SUN}" fill-opacity=".45" stroke="${INK}" stroke-width="2" pointer-events="none"/>`}
+  // legs
+  const col=full?LEAF:YARN, hi=full?LEAFL:YARNL; S.legs=buildLegs();
+  S.legs.forEach((g,i)=>{const d=`M${g.A.x} ${g.A.y} Q${g.C.x} ${g.C.y} ${g.B.x} ${g.B.y}`;
+    h+=`<path d="${d}" fill="none" stroke="${INK}" stroke-width="10.5" stroke-linecap="round" pointer-events="none"/><path d="${d}" fill="none" stroke="${col}" stroke-width="6.5" stroke-linecap="round" pointer-events="none"/><path d="${d}" fill="none" stroke="${hi}" stroke-width="2" stroke-dasharray="6 6" pointer-events="none"/>`;
+    if(g.tail){const b=g.B;h+=`<path d="M${b.x} ${b.y} l9 -5 M${b.x} ${b.y} l10 3 M${b.x} ${b.y} l5 9" stroke="${col}" stroke-width="2.4" stroke-linecap="round" pointer-events="none"/>`}
+    if(!dr) h+=`<path d="${d}" fill="none" stroke="transparent" stroke-width="34" data-leg="${i}" style="cursor:${L>0?'grab':'not-allowed'}" pointer-events="stroke"/>`;});
+  // hover knot
+  if(S.hover&&!dr){const k=S.hover,c=L>0?YARN:'#9A917A',kd=`M${k.x-8} ${k.y+5} c0 -13 17 -13 17 0 c0 9 -12 11 -17 4`;
+    h+=`<path d="${kd}" fill="none" stroke="${INK}" stroke-width="7" stroke-linecap="round" pointer-events="none"/><path d="${kd}" fill="none" stroke="${c}" stroke-width="3.8" stroke-linecap="round" pointer-events="none"/>`}
+  // stops
+  S.stops.forEach((s,i)=>{const p=pos(s),r=R(s.days),sel=S.sel===i,act=sel||s.tmp;
+    if(act){h+=`<circle cx="${p.x}" cy="${p.y}" r="${r+8}" fill="none" stroke="${INK}" stroke-width="8.5" pointer-events="none"/><circle cx="${p.x}" cy="${p.y}" r="${r+8}" fill="none" stroke="${SUN}" stroke-width="5" pointer-events="none"/>`}
+    h+=`<circle cx="${p.x+2.5}" cy="${p.y+3.5}" r="${r}" fill="${INK}" pointer-events="none"/><g data-stop="${i}" style="cursor:pointer">${yarnBall(p.x,p.y,r,full&&!s.tmp)}</g>`;
+    h+=`<text x="${p.x}" y="${p.y}" text-anchor="middle" dominant-baseline="central" font-family="${FR}" font-weight="700" font-size="${13+1.7*Math.min(s.days,9)}" fill="#fff" stroke="${INK}" stroke-width="3.2" stroke-linejoin="round" paint-order="stroke" pointer-events="none">${s.days}d</text>`;
+    if(!s.tmp&&!dr) h+=`<circle cx="${p.x}" cy="${p.y}" r="${r+4}" fill="none" stroke="transparent" stroke-width="22" data-rim="${i}" style="cursor:grab" pointer-events="stroke"/>`;
+    if(sel&&!s.tmp){const ang=S.handleA,rad=ang*Math.PI/180,cx=Math.cos(rad),sy=Math.sin(rad);
+      const x1=p.x+cx*(r-6),y1=p.y+sy*(r-6),x2=p.x+cx*(r+38),y2=p.y+sy*(r+38);
+      h+=`<path d="M${x1} ${y1} L${x2} ${y2}" stroke="${INK}" stroke-width="7.5" stroke-linecap="round" pointer-events="none"/><path d="M${x1} ${y1} L${x2} ${y2}" stroke="#C99A62" stroke-width="4" stroke-linecap="round" pointer-events="none"/>`;
+      h+=`<path d="M${x1} ${y1} L${x2} ${y2}" stroke="transparent" stroke-width="18" data-rim="${i}" style="cursor:grab" pointer-events="stroke"/><circle cx="${x2}" cy="${y2}" r="10" fill="${SUN}" stroke="${INK}" stroke-width="2.8" data-rim="${i}" style="cursor:grab"><title>Drag to change days</title></circle>`;
+      const removable=i>0&&(S.mode==='dest'||i<n-1);
+      if(removable&&!dr){const rr=r+16,rx=p.x+rr*Math.cos(-2.36),ry=p.y+rr*Math.sin(-2.36);
+        h+=`<g data-remove="${i}" style="cursor:pointer"><circle cx="${rx}" cy="${ry}" r="14" fill="#fff" stroke="${INK}" stroke-width="2.5"/><g transform="translate(${rx+1},${ry-1}) scale(.62)" pointer-events="none"><path d="M-2 4 L10 -12 L13 -9 Z M-2 4 L14 -2 L13 2 Z" fill="#DCE2E2" stroke="${INK}" stroke-width="2.4" stroke-linejoin="round"/><path d="M-2 4 L-9 9 M-2 4 L-5 13" stroke="${INK}" stroke-width="3.2" stroke-linecap="round"/><circle cx="-11" cy="11" r="4.6" fill="${BERRY}" stroke="${INK}" stroke-width="2"/><circle cx="-5" cy="16" r="4.6" fill="${BERRY}" stroke="${INK}" stroke-width="2"/></g><title>Snip ${s.name} from the route</title></g>`}}
+    if(!s.tmp&&i===0)h+=`<g pointer-events="none">${FLAG_G(p.x-r*.62,p.y-r*.78-30)}</g>`;
+    if(!s.tmp&&isEnd(i))h+=`<g pointer-events="none">${FLAG_F(p.x+r*.62,p.y-r*.78-30)}</g>`;
+    const lname=s.tmp?(dr&&dr.snap):s.name;
+    if(lname){const lp=CITIES[lname].lab,rr=r+(act?10:0);let tx=p.x,ty=p.y+rr+22,anc='middle';if(lp==='above'){ty=p.y-rr-12}if(lp==='left'){tx=p.x-rr-14;ty=p.y+5;anc='end'}
+      h+=halo(tx,ty,lname,anc,700,15,INK);}
+  });
+  // postcards
+  S.tagPos={};
+  if(S.notesOn&&!dr){
+    S.stops.forEach((s,i)=>{if(s.tmp)return;const p=pos(s),r=R(s.days),k='s:'+s.name,low=isEnd(i);
+      const x=p.x+r*.7+6,y=low?p.y+r*.7-2:p.y-r*.7-30,rot=low?8:-9;S.tagPos[k]={x:x+18,y:y+13};
+      const has=hasNote(k),bk=booked(k),o=S.open.includes(k);
+      h+=`<g data-tag="${k}" style="cursor:pointer" transform="translate(${x},${y}) rotate(${rot})"><rect x="3" y="3.5" width="38" height="27" rx="2.5" fill="${INK}"/><rect width="38" height="27" rx="2.5" fill="#fff" stroke="${o?YARN:INK}" stroke-width="${o?2.8:1.9}"/>
+        <path d="M20 4 V23" stroke="#D8CFBB" stroke-width="1"/><rect x="26" y="4" width="8" height="9" fill="${has?YARN:'#EAE4D6'}" stroke="${INK}" stroke-width=".9"/>
+        <path d="M4 9 H16 M4 14 H16 M4 19 H12" stroke="${INK}" stroke-width="1.2" opacity="${has?.7:.22}" stroke-linecap="round"/>
+        ${bk?`<g transform="translate(30,21) rotate(-14)"><circle r="7" fill="#fff" fill-opacity=".8" stroke="${BERRY}" stroke-width="1.5"/><text text-anchor="middle" dominant-baseline="central" font-family="${FT}" font-weight="800" font-size="6.5" fill="${BERRY}">OK</text></g>`:''}
+        <title>${s.name} postcard</title></g>`});
+  }
+  if(S.ghost){const g=S.ghost;h+=`<g pointer-events="none"><circle cx="${g.x}" cy="${g.y}" r="26" fill="#fff" fill-opacity=".9" stroke="${BERRY}" stroke-width="2.5" stroke-dasharray="5 4"/><path d="M${g.x-9} ${g.y-9} L${g.x+9} ${g.y+9} M${g.x+9} ${g.y-9} L${g.x-9} ${g.y+9}" stroke="${BERRY}" stroke-width="3.5" stroke-linecap="round"/></g>`}
+  dyn.innerHTML=h;
+  hud(); header(); tip(); placeCards(); banner(full); renderKit();
+}
+
+/* ---------- header ---------- */
+function header(){const st=S.stops.filter(s=>!s.tmp),n=st.length;const tn=$('tname');if(document.activeElement!==tn&&tn.value!==S.name)tn.value=S.name;tn.style.width=Math.max(6,tn.value.length+1)+'ch';
+  const fg=`<svg width="12" height="17" viewBox="0 0 12 17"><path d="M2 16 V2" stroke="${INK}" stroke-width="1.8" stroke-linecap="round"/><path d="M2 2 L11 5.5 L2 9Z" fill="${LEAF}" stroke="${INK}" stroke-width="1.1"/></svg>`;
+  const ff=`<svg width="14" height="17" viewBox="0 0 14 17"><path d="M2 16 V2" stroke="${INK}" stroke-width="1.8" stroke-linecap="round"/><rect x="2" y="2" width="11" height="7.5" fill="#fff" stroke="${INK}" stroke-width="1.1"/><path d="M2 2h2.75v3.75H2Z M7.5 2h2.75v3.75H7.5Z M4.75 5.75H7.5V9.5H4.75Z M10.25 5.75H13V9.5h-2.75Z" fill="${INK}"/></svg>`;
+  const mids=S.mode==='se'?st.slice(1,-1):st.slice(1);const w=86;let dots='';
+  mids.forEach((s,i)=>{const x=8+(i+1)*(w-16)/(mids.length+1),y=7+5*Math.sin(Math.PI*(x/w));dots+=`<circle cx="${x}" cy="${y}" r="${2.6+Math.min(s.days,8)*.42}" fill="${leftD()<=0?LEAF:YARN}" stroke="${INK}" stroke-width="1.1"/>`});
+  const yarn=`<svg width="${w}" height="18" viewBox="0 0 ${w} 18"><path d="M3 6 Q${w/2} 16 ${w-3} 6" fill="none" stroke="${INK}" stroke-width="3.6" stroke-linecap="round"/><path d="M3 6 Q${w/2} 16 ${w-3} 6" fill="none" stroke="${leftD()<=0?LEAF:YARN}" stroke-width="2" stroke-linecap="round"/>${dots}</svg>`;
+  $('mroute').innerHTML=S.mode==='se'?`${fg}<span>${st[0].name}</span>${yarn}${ff}<span>${st[n-1].name}</span><span class="mut">· ${plural(n,'stop')}</span>`
+    :`${fg}<span>${st[0].name}</span>${n>1?yarn:''}<span class="mut">· ${plural(n,'stop')}</span>`;
+}
+
+/* ---------- slackline kitten ---------- */
+const kitEl=$('kit');let kitKey='',kitMoodPrev='';
+function kitMood(){const L=leftD(),p=clamp(spent()/S.total,0,1);
+  if(S.react&&Date.now()<S.react.until)return S.react.type;
+  if(S.drag)return 'focus'; if(L<=0)return 'celebrate'; if(p<.4)return 'wobbly'; if(p<.75)return 'steady'; return 'happy'}
+function kitPos(){
+  if(!S.legs.length)return null;
+  const st=S.stops.map(s=>({...pos(s),r:R(s.days)}));
+  const pts=[];S.legs.forEach((g,i)=>{for(let k=i?1:0;k<=60;k++)pts.push(qp(g,k/60))});
+  const cum=[0];for(let i=1;i<pts.length;i++)cum.push(cum[i-1]+Math.hypot(pts[i].x-pts[i-1].x,pts[i].y-pts[i-1].y));
+  const tot=cum[cum.length-1],target=clamp(spent()/S.total,0,1)*tot;
+  let idx=cum.findIndex(c=>c>=target);if(idx<0)idx=pts.length-1;
+  const inside=i=>st.some(s=>Math.hypot(pts[i].x-s.x,pts[i].y-s.y)<s.r+22);
+  let j=idx;while(j<pts.length-1&&inside(j))j++;if(inside(j)){j=idx;while(j>0&&inside(j))j--}
+  const a=pts[Math.max(0,j-3)],b=pts[Math.min(pts.length-1,j+3)],dx=b.x-a.x,dy=b.y-a.y;
+  let tilt=Math.atan2(dy,dx)*180/Math.PI;if(tilt>90)tilt-=180;if(tilt<-90)tilt+=180;
+  return {x:pts[j].x,y:pts[j].y,tilt:clamp(tilt,-26,26),flip:dx<0};
+}
+function renderKit(){const p=kitPos(),m=kitMood();
+  const key=p?`${p.x|0},${p.y|0},${p.tilt|0},${p.flip},${m}`:'none';if(key===kitKey)return;kitKey=key;
+  if(!p){kitEl.innerHTML='';return}
+  const sc=1.55,cls=m==='wobbly'?'wob':m==='celebrate'?'cheer':'';const pop=m!==kitMoodPrev;kitMoodPrev=m;
+  const conf=m==='celebrate'?`<g>${[[-34,-70,SUN,20],[30,-78,YARN,-30],[-14,-92,LEAF,15],[42,-52,SUN,40],[-44,-40,YARN,-15]].map(([x,y,c,a])=>`<rect x="${x}" y="${y}" width="9" height="6" rx="1.5" fill="${c}" stroke="${INK}" stroke-width="1" transform="rotate(${a} ${x+4} ${y+3})"/>`).join('')}</g>`:'';
+  kitEl.innerHTML=`<g transform="translate(${p.x},${p.y}) rotate(${p.tilt})">${conf}<g class="${pop?'pop':''}"><g class="${cls}"><g transform="scale(${p.flip?-sc:sc},${sc}) translate(0,-20.5)">${catSVG(m)}</g></g></g></g>`;
+}
+let reactT;function react(t){S.react={type:t,until:Date.now()+1500};kitKey='';renderKit();clearTimeout(reactT);reactT=setTimeout(()=>{kitKey='';renderKit()},1550)}
+
+/* ---------- HUD ---------- */
+function hud(){const sp=spent(),L=leftD(),full=L<=0;
+  $('total').textContent=S.total;$('left').textContent=Math.max(0,L);$('left').style.color=full?LEAF:YARN;
+  $('leftl').textContent=L===1?'day left':'days left';$('planned').textContent=`${sp} of ${S.total} planned`;
+  $('minus').disabled=S.total<=2;$('plus').disabled=S.total>=90;
+  $('ball').innerHTML=full?`<g transform="translate(44,46)"><rect x="-17" y="-22" width="34" height="7" rx="2" fill="#E6CFA4" stroke="${INK}" stroke-width="2.2"/><rect x="-11" y="-15" width="22" height="30" fill="#F3E3C3" stroke="${INK}" stroke-width="2.2"/><rect x="-17" y="15" width="34" height="7" rx="2" fill="#E6CFA4" stroke="${INK}" stroke-width="2.2"/><path d="M-11 -6 H11 M-11 2 H11" stroke="${LEAF}" stroke-width="2"/></g>`
+    :yarnBall(44,46,8+26*clamp(L/S.total,0,1),false);
+  const w=270,f=clamp(sp/S.total,0,1);let b=`<rect x="1" y="2" width="${w-2}" height="12" rx="6" fill="#F1EDE4" stroke="${INK}" stroke-width="1.6"/>`;
+  if(f>0)b+=`<rect x="1" y="2" width="${Math.max(12,(w-2)*f)}" height="12" rx="6" fill="${full?LEAF:YARN}" stroke="${INK}" stroke-width="1.6"/>`;
+  if(S.total<=45)for(let i=1;i<S.total;i++){const x=1+(w-2)*i/S.total;b+=`<path d="M${x} 5 V11" stroke="${INK}" stroke-opacity="${i<sp?.35:.18}" stroke-width="1"/>`}
+  $('bar').innerHTML=b;
+  $('foot').innerHTML=full?`<span style="color:${LEAF};font-weight:700">Every day is planned</span>`:(L<=4?`<span style="color:${YARN};font-weight:700">Only ${plural(L,'day')} of yarn left</span>`:'Each ball’s size is days of stay');
+}
+let alertT;function alertHud(){const e=$('hud');e.classList.remove('shake');void e.offsetWidth;e.classList.add('shake','alert');clearTimeout(alertT);alertT=setTimeout(()=>e.classList.remove('alert','shake'),1400)}
+
+/* ---------- tooltip ---------- */
+function tip(){const t=$('tip'),dr=S.drag,L=leftD();let title='',body='',x=0,y=0;
+  if(dr&&dr.type==='pull'){const s=S.stops[dr.i];title=dr.snap?`Drop to add ${dr.snap}`:'New stop · 1 day';body=dr.snap?'1 day comes off your yarn.':'Drop it on a lit pin within reach.';x=s.x-150;y=s.y+56}
+  else if(dr&&dr.type==='grow'){const s=S.stops[dr.i],p=pos(s),r=R(s.days);title=`${s.name} · ${plural(s.days,'day')}`;body=dr.over?'Trip is full. Add days to the budget first.':`${plural(L,'day')} of yarn left`;x=p.x-150;y=p.y-r-150;if(y<100)y=p.y+r+56}
+  else if(S.hover){title=L>0?'Add a stop':'Trip is full';body=L>0?'Pull the knot to a city.':'Shorten a stay or add days first.';x=S.hover.x+26;y=S.hover.y+28}
+  else if(S.sel!==null&&S.stops[S.sel]){const i=S.sel,s=S.stops[i],p=pos(s),r=R(s.days),rem=i>0&&(S.mode==='dest'||i<S.stops.length-1);title=`${s.name} · ${plural(s.days,'day')}`;body='Drag the needle to change days.'+(rem?' Use the scissors to remove this stop.':'');x=p.x+r+48;y=p.y-r-60;if(x>1110&&y<320)y=330}
+  if(!title){t.classList.add('hidden');return}
+  t.querySelector('h4').textContent=title;t.querySelector('p').textContent=body;
+  t.style.left=clamp(x,16,1440-316)+'px';t.style.top=clamp(y,100,1000-120)+'px';t.classList.remove('hidden');}
+
+/* ---------- toast ---------- */
+let toastT;function toast(bad,title,body,mood){const t=$('toast');t.classList.toggle('bad',bad);
+  t.querySelector('svg').innerHTML=`<g transform="translate(36,52) scale(1.25) translate(0,-6)">${catSVG(mood||(bad?'no':'yay'))}</g>`;
+  t.querySelector('h4').textContent=title;t.querySelector('p').textContent=body;t.classList.remove('hidden');clearTimeout(toastT);toastT=setTimeout(()=>t.classList.add('hidden'),3400)}
+
+/* ---------- banner ---------- */
+function banner(full){const b=$('banner');const show=full&&!S.drag&&!S.notesOn&&!S.open.length;
+  if(!show){b.innerHTML='';b.classList.remove('go2');if(!full)S.wasFull=false;return}
+  if(b.innerHTML)return;
+  const conf=[[540,850,SUN,20],[585,830,YARN,-30],[640,846,LEAF,15],[700,826,SUN,40],[760,842,YARN,-15],[820,828,LEAF,30],[880,848,SUN,-35],[610,862,YARN,10],[850,866,SUN,20]];
+  b.innerHTML='<g transform="translate(40,0)">'+conf.map(([x,y,c,a],i)=>`<g class="conf" style="animation-delay:${i*0.04}s"><rect x="${x}" y="${y}" width="11" height="7" rx="1.5" fill="${c}" stroke="${INK}" stroke-width="1" transform="rotate(${a} ${x+5} ${y+3})"/></g>`).join('')+
+  `<g class="rib"><path d="M500 886 H456 L473 905 L456 924 H500Z" fill="${LEAFD}" stroke="${INK}" stroke-width="2.5" stroke-linejoin="round"/><path d="M940 886 H984 L967 905 L984 924 H940Z" fill="${LEAFD}" stroke="${INK}" stroke-width="2.5" stroke-linejoin="round"/>
+   <rect x="504" y="877" width="440" height="62" rx="10" fill="${INK}"/><rect x="500" y="872" width="440" height="62" rx="10" fill="${LEAF}" stroke="${INK}" stroke-width="2.5"/>
+   <text x="720" y="904" text-anchor="middle" dominant-baseline="central" font-family="${FR}" font-weight="640" font-size="24" fill="#fff">Trip woven! All ${S.total} days planned.</text></g></g>`;
+  if(!S.wasFull){b.classList.remove('go2');void b.getBBox();b.classList.add('go2');S.wasFull=true}
+}
+
+/* ---------- postcard notes ---------- */
+const cardsEl=$('cards'),threads=$('threads');
+function pcRight(k){const s=S.stops.find(s=>'s:'+s.name===k),d=s?s.days:1,bk=booked(k);
+  return `<g transform="translate(0,30)"><rect x="88" y="10" width="40" height="48" fill="#fff" stroke="${INK}" stroke-width="1.3" stroke-dasharray="2.4 1.8"/><rect x="93" y="15" width="30" height="38" fill="${YARN}" stroke="${INK}" stroke-width="1.2"/>
+   <g transform="translate(108,38) scale(.62)"><path d="M-17 -12 L-14 -31 L-3 -19Z M3 -19 L14 -31 L17 -12Z" fill="#fff"/><circle r="22" fill="#fff"/><path d="M-8.5 -1 q3 -3.5 6 0 M2.5 -1 q3 -3.5 6 0" fill="none" stroke="${YARN}" stroke-width="2.6" stroke-linecap="round"/></g>
+   <circle cx="62" cy="62" r="30" fill="none" stroke="${INK}" stroke-width="1.6" opacity=".8"/><circle cx="62" cy="62" r="25" fill="none" stroke="${INK}" stroke-width=".8" opacity=".6"/>
+   <text x="62" y="56" text-anchor="middle" font-family="${FR}" font-weight="700" font-size="22" fill="${INK}">${d}</text><text x="62" y="74" text-anchor="middle" font-family="${FT}" font-weight="700" font-size="11" fill="${INK}" letter-spacing="1">${d===1?'DAY':'DAYS'}</text>
+   <path d="M14 112 q6 -4 12 0 t12 0 t12 0 t12 0 M14 121 q6 -4 12 0 t12 0 t12 0 t12 0 M14 130 q6 -4 12 0 t12 0 t12 0 t12 0" fill="none" stroke="${INK}" stroke-width="1.2" opacity=".5"/>
+   <path d="M16 170 H130 M16 190 H124 M16 210 H112" stroke="#D2C8B1" stroke-width="1.6" stroke-linecap="round"/>
+   ${bk?`<g transform="translate(96,146) rotate(-14)"><circle r="27" fill="#fff" fill-opacity=".55" stroke="${BERRY}" stroke-width="3"/><circle r="21" fill="none" stroke="${BERRY}" stroke-width="1.2"/><text text-anchor="middle" dominant-baseline="central" y="-2" font-family="${FR}" font-weight="800" font-size="20" fill="${BERRY}">OK</text><text text-anchor="middle" y="14" font-family="${FT}" font-weight="700" font-size="7.5" fill="${BERRY}" letter-spacing="1">BOOKED</text></g>`:''}</g>`}
+function openCard(k){if(S.open.includes(k))return;S.open.push(k);const el=document.createElement('div');el.className='card pcard';el.dataset.key=k;
+  const n=S.notes[k]||(S.notes[k]={});
+  el.innerHTML=`<button class="min" aria-label="Put the postcard away">−</button><div class="pl"><div class="k">Postcard from</div><h4></h4><label>Stay · booking link</label><input data-f="link" type="url" placeholder="Paste a link"><label>Remember</label><textarea data-f="remember" rows="3" placeholder="Anything to keep in mind"></textarea><div class="sv"></div></div><div class="pr"><svg viewBox="0 0 146 262" preserveAspectRatio="xMidYMin meet" aria-hidden="true"></svg></div>`;
+  el.querySelectorAll('[data-f]').forEach(f=>{f.value=n[f.dataset.f]||'';f.addEventListener('input',()=>{n[f.dataset.f]=f.value;el.querySelector('.sv').textContent='✓ Saved';render()})});
+  if(hasNote(k))el.querySelector('.sv').textContent='✓ Saved';
+  el.querySelector('.min').addEventListener('click',()=>closeCard(k));cardsEl.appendChild(el);render()}
+function closeCard(k){S.open=S.open.filter(x=>x!==k);const el=cardsEl.querySelector(`[data-key="${CSS.escape(k)}"]`);if(el)el.remove();render()}
+function placeCards(){let th='';const placed=[];
+  for(const k of [...S.open]){const el=cardsEl.querySelector(`[data-key="${CSS.escape(k)}"]`);const tp=S.tagPos[k];
+    if(!el)continue; if(!tp){ if(!S.drag){closeCard(k)} else el.style.visibility='hidden'; continue}
+    el.style.visibility='visible';el.querySelector('h4').textContent=k.slice(2);el.querySelector('.pr svg').innerHTML=pcRight(k);
+    const w=el.offsetWidth,hgt=el.offsetHeight;
+    const cands=[[tp.x+30,tp.y+30],[tp.x-w-30,tp.y+30],[tp.x+30,tp.y-hgt-30],[tp.x-w-30,tp.y-hgt-30],[tp.x-w/2,tp.y+50],[tp.x+30,tp.y+140],[tp.x-w-30,tp.y+140],[tp.x-w/2,tp.y+160],[tp.x-w/2,tp.y-hgt-70]].map(([cx,cy])=>{cx=clamp(cx,12,1428-w);cy=clamp(cy,104,1000-hgt-12);if(cx+w>1080&&cy<300)cy=300;return [cx,cy]});
+    const hit=(x,y,r,cx,cy)=>{const dx=Math.max(cx-x,0,x-(cx+w)),dy=Math.max(cy-y,0,y-(cy+hgt));return Math.hypot(dx,dy)<r};
+    const ov=(a,b)=>!(a[0]+a[2]<b[0]||b[0]+b[2]<a[0]||a[1]+a[3]<b[1]||b[1]+b[3]<a[1]);
+    const blocks=[...placed];if(!$('hint').classList.contains('closed'))blocks.push([1066,742,344,250]);
+    let best=cands[0],bs=1e9;for(const [cx,cy] of cands){let sc=hit(tp.x,tp.y,28,cx,cy)?10:0;S.stops.forEach(o=>{const q=pos(o);if(hit(q.x,q.y,R(o.days)+10,cx,cy))sc+=4+R(o.days)/20});blocks.forEach(b=>{if(ov([cx,cy,w,hgt],b))sc+=6});if(sc<bs){bs=sc;best=[cx,cy]}}
+    let [x,y]=best;placed.push([x,y,w,hgt]);
+    el.style.left=x+'px';el.style.top=y+'px';const ax=x+(x>tp.x?14:w-14),ay=y+(y>tp.y?14:hgt-14);
+    th+=`<path d="M${tp.x} ${tp.y} Q${(tp.x+ax)/2} ${Math.max(tp.y,ay)+24} ${ax} ${ay}" fill="none" stroke="${YARN}" stroke-width="2.4" stroke-linecap="round"/>`}
+  threads.innerHTML=th}
+
+/* ---------- map interaction ---------- */
+const map=$('map'),stage=$('stage');let scale=1;
+function fit(){const vp=$('vp'),W=vp.clientWidth,H=vp.clientHeight;scale=Math.min(W/1440,H/1000);stage.style.transform=`translate(${(W-1440*scale)/2}px,${(H-1000*scale)/2}px) scale(${scale})`}
+addEventListener('resize',fit);fit();
+const toStage=e=>{const r=stage.getBoundingClientRect();return {x:(e.clientX-r.left)/scale,y:(e.clientY-r.top)/scale}};
+function blocked(p){S.ghost=p?{x:p.x,y:p.y-34}:null;alertHud();react('no');toast(true,'Trip is full','Shorten a stay or add days to continue.','no');render();if(p)setTimeout(()=>{S.ghost=null;render()},1500)}
+map.addEventListener('pointerdown',e=>{const p=toStage(e);const t=e.target.closest('[data-remove],[data-tag],[data-rim],[data-stop],[data-leg]');S.hover=null;
+  if(!t){S.sel=null;render();return}
+  if(t.dataset.remove!==undefined){const i=+t.dataset.remove,s=S.stops[i];S.stops.splice(i,1);S.sel=null;react('oops');toast(false,`${s.name} snipped`,`${plural(s.days,'day')} wound back onto your yarn.`,'oops');render();return}
+  if(t.dataset.tag!==undefined){const k=t.dataset.tag;S.open.includes(k)?closeCard(k):openCard(k);return}
+  if(t.dataset.rim!==undefined){const i=+t.dataset.rim,s=S.stops[i],c=pos(s);const ang=Math.atan2(p.y-c.y,p.x-c.x)*180/Math.PI;S.sel=i;S.handleA=ang;S.drag={type:'grow',i,over:false,off:Math.hypot(p.x-c.x,p.y-c.y)-R(s.days)};map.setPointerCapture(e.pointerId);render();return}
+  if(t.dataset.stop!==undefined){const i=+t.dataset.stop;if(S.sel!==i)S.handleA=45;S.sel=S.sel===i?null:i;render();return}
+  if(t.dataset.leg!==undefined){if(leftD()<1){blocked(p);return}const i=+t.dataset.leg;S.stops.splice(i+1,0,{tmp:true,x:p.x,y:p.y,days:1});S.sel=null;S.drag={type:'pull',i:i+1,origin:{...p},snap:null};map.setPointerCapture(e.pointerId);map.style.cursor='grabbing';render()}
+});
+map.addEventListener('pointermove',e=>{const p=toStage(e),dr=S.drag;
+  if(dr&&dr.type==='pull'){const t=S.stops[dr.i];const inRoute=new Set(S.stops.filter(s=>!s.tmp).map(s=>s.name));let best=null,bd=SNAP;
+    for(const [nm,c] of Object.entries(CITIES)){if(inRoute.has(nm))continue;if(Math.hypot(c.x-dr.origin.x,c.y-dr.origin.y)>REACH)continue;const d=Math.min(Math.hypot(c.x-p.x,c.y-p.y),Math.hypot(c.x-p.x,c.y-20-p.y));if(d<bd){bd=d;best=nm}}
+    dr.snap=best;if(best){t.x=CITIES[best].x;t.y=CITIES[best].y}else{t.x=p.x;t.y=p.y}render();return}
+  if(dr&&dr.type==='grow'){const s=S.stops[dr.i],c=pos(s),r=Math.hypot(p.x-c.x,p.y-c.y)-dr.off;S.handleA=Math.atan2(p.y-c.y,p.x-c.x)*180/Math.PI;
+    const want=Math.max(1,Math.round(dFromR(r))),max=s.days+leftD();if(want>max){if(!dr.over){dr.over=true;alertHud();react('no')}s.days=max}else{dr.over=false;s.days=want}render();return}
+  const t=e.target.closest('[data-leg]');if(t){const g=S.legs[+t.dataset.leg];const q=nearest(g,p);S.hover={x:q.x,y:q.y};render()}else if(S.hover){S.hover=null;render()}
+});
+function endDrag(){const dr=S.drag;if(!dr)return;map.style.cursor='';
+  if(dr.type==='pull'){if(dr.snap){const name=dr.snap;S.stops[dr.i]={name,days:1};S.drag=null;
+      const c=CITIES[name];$('fx').innerHTML=sparkle(c.x-36,c.y-32,1.1,0)+sparkle(c.x+38,c.y+36,.9,.1)+sparkle(c.x-32,c.y+36,.7,.18);setTimeout(()=>$('fx').innerHTML='',1300);
+      if(leftD()>0){react('yay');toast(false,`${name} added`,'1 day pulled from your yarn.','yay')}render()}
+    else{S.stops.splice(dr.i,1);S.drag=null;react('oops');toast(true,'No pin there','Drop the new stop on a lit pin within reach.','oops');render()}return}
+  if(dr.type==='grow'){S.drag=null;if(dr.over)toast(true,'Trip is full','Shorten a stay or add days to continue.','no');render()}}
+map.addEventListener('pointerup',endDrag);map.addEventListener('pointercancel',endDrag);
+map.addEventListener('pointerleave',()=>{if(!S.drag&&S.hover){S.hover=null;render()}});
+$('plus').addEventListener('click',()=>{S.total=Math.min(90,S.total+1);render()});
+$('minus').addEventListener('click',()=>{if(S.total-1<spent()){alertHud();react('no');toast(true,'Days are in use',`Your stops use ${spent()} days. Shorten a stay first.`,'no');return}S.total=Math.max(2,S.total-1);render()});
+$('notesBtn').addEventListener('click',()=>{S.notesOn=!S.notesOn;const b=$('notesBtn');b.classList.toggle('on',S.notesOn);b.setAttribute('aria-pressed',S.notesOn);b.querySelector('span').textContent=S.notesOn?'Hide notes':'Show notes';
+  if(!S.notesOn){cardsEl.innerHTML='';S.open=[]}render()});
+$('tname').addEventListener('input',e=>{S.name=e.target.value;e.target.style.width=Math.max(6,e.target.value.length+1)+'ch'});
+$('tname').addEventListener('keydown',e=>{if(e.key==='Enter')e.target.blur()});
+$('tname').addEventListener('blur',e=>{if(!e.target.value.trim()){S.name='Untitled trip';e.target.value=S.name}});
+$('pencil').addEventListener('click',()=>{const i=$('tname');i.focus();i.select()});
+$('hintX').addEventListener('click',()=>{$('hint').classList.add('closed');$('helpBtn').classList.add('show')});
+$('helpBtn').addEventListener('click',()=>{$('hint').classList.remove('closed');$('helpBtn').classList.remove('show')});
+
+/* ---------- ticket (new trip) ---------- */
+const names=Object.keys(CITIES);
+['fromSel','toSel'].forEach(id=>{$(id).innerHTML=names.map(n=>`<option value="${n}">${n} (${CITIES[n].code})</option>`).join('')});
+$('bars').innerHTML=[2,4,1.5,3,2,5,1.5,3,2,4,1.5,3,2,5,1.5,3,2,4,2,3,1.5,4,2,3,5,1.5,2,4,3,2].reduce((a,w,i,arr)=>{const x=arr.slice(0,i).reduce((s,v)=>s+v+2.6,0);return a+(x+w<=202?`<rect x="${x}" y="0" width="${w}" height="30" fill="${INK}"/>`:'')},'');
+$('tKit').innerHTML=`<g transform="scale(2) translate(0,-6)">${catSVG('eager')}</g>`;
+$('yline').innerHTML=`${FLAG_G(30,26)}${FLAG_F(238,26)}<path d="M30 56 Q134 120 238 56" fill="none" stroke="${INK}" stroke-width="9" stroke-linecap="round"/><path d="M30 56 Q134 120 238 56" fill="none" stroke="${YARN}" stroke-width="5.5" stroke-linecap="round"/><path d="M30 56 Q134 120 238 56" fill="none" stroke="${YARNL}" stroke-width="1.8" stroke-dasharray="6 6"/>
+  <g transform="translate(104,82) rotate(12)"><g class="wob"><g transform="scale(1.15) translate(0,-20.5)">${catSVG('wobbly')}</g></g></g>`;
+function drawTicket(){
+  $('ticket').classList.toggle('dest',T.mode==='dest');$('modeSE').classList.toggle('on',T.mode==='se');$('modeD').classList.toggle('on',T.mode==='dest');
+  $('modeSE').setAttribute('aria-pressed',T.mode==='se');$('modeD').setAttribute('aria-pressed',T.mode==='dest');
+  $('fromSel').value=T.from;$('toSel').value=T.to;$('fromCode').textContent=CITIES[T.from].code;$('fromName').textContent=T.from;$('toCode').textContent=CITIES[T.to].code;$('toName').textContent=T.to;
+  $('toLab').textContent=T.mode==='se'?'To':'Destination';
+  $('tDays').textContent=T.days;$('tMinus').disabled=T.days<=2;$('tPlus').disabled=T.days>=90;
+  $('tBall').innerHTML=yarnBall(20,22,9+11*Math.min(T.days,60)/60,false);
+  $('sDays').textContent=plural(T.days,'day');$('sRoute').textContent=T.mode==='se'?`${CITIES[T.from].code} → ${CITIES[T.to].code}`:`${CITIES[T.to].code} and beyond`;
+  const bad=T.mode==='se'&&T.from===T.to;$('sErr').textContent=bad?'Pick two different cities.':'';$('go').disabled=bad||!T.name.trim();
+}
+$('fromSel').addEventListener('change',e=>{T.from=e.target.value;drawTicket()});
+$('toSel').addEventListener('change',e=>{T.to=e.target.value;drawTicket()});
+$('modeSE').addEventListener('click',()=>{T.mode='se';drawTicket()});
+$('modeD').addEventListener('click',()=>{T.mode='dest';drawTicket()});
+$('tMinus').addEventListener('click',()=>{T.days=Math.max(2,T.days-1);drawTicket()});
+$('tPlus').addEventListener('click',()=>{T.days=Math.min(90,T.days+1);drawTicket()});
+$('tTripName').addEventListener('input',e=>{T.name=e.target.value;drawTicket()});
+function showTicket(){cardsEl.innerHTML='';$('tTripName').value=T.name;drawTicket();$('tix').classList.remove('gone');$('toast').classList.add('hidden')}
+$('go').addEventListener('click',()=>{T.name=T.name.trim()||'Untitled trip';fresh();cardsEl.innerHTML='';kitKey='';const b=$('notesBtn');b.classList.remove('on');b.setAttribute('aria-pressed','false');b.querySelector('span').textContent='Show notes';$('tix').classList.add('gone');render()});
+$('brand').addEventListener('click',showTicket);
+$('reset').addEventListener('click',()=>{Object.assign(T,{mode:'se',from:'Lisbon',to:'Barcelona',days:22,name:'Iberian escape'});showTicket()});
+window.__sl={get S(){return S},T,leg:(i,t)=>qp(S.legs[i],t)};
+drawTicket();render();
+</script>
+</body>
+</html>
