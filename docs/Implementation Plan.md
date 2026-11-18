@@ -1,10 +1,10 @@
 # SlackLine implementation plan
 
-Build a desktop-first React and TypeScript trip planner using [the interactive prototype](slackline-prototype.html) as the visual reference. Preserve its ticket, typography, icons, yarn texture, postcards, cat reactions, and budget feedback. The planner opens on the trip ticket for a new user and restores the active trip for a returning user.
+Build a desktop-first React and TypeScript trip planner using [the interactive prototype](slackline-prototype.html) as the visual reference. Preserve its ticket, typography, icons, yarn texture, postcards, cat reactions, and budget feedback. The planner opens on My trips on every launch and refresh. From there, users can reopen any saved trip or select New trip.
 
 ## 1. Establish the app and visual baseline
 
-Set up React and TypeScript. Deliver the course's Hello World opening screen as the first milestone, then retain it and the Hello Styles screen on a demo route once the ticket becomes the app entry point. Port the prototype's SVG assets and style tokens, including the five specified colors, Fraunces and Figtree weights, and custom icons. Move the ticket, header, budget display, and help controls into components. Preserve both trip modes and the editable trip duration.
+Set up React and TypeScript. Deliver the course's Hello World opening screen as the first milestone, then retain it and the Hello Styles screen on a demo route once My trips becomes the app entry point. Port the prototype's SVG assets and style tokens, including the five specified colors, Fraunces and Figtree weights, and custom icons. Move the ticket, header, budget display, and help controls into components. Preserve both trip modes and the editable trip duration.
 
 **Demo check.** Open both course screens, then create a 22-day trip from the ticket. Compare the ticket and planner controls side by side with the HTML reference at the same viewport size.
 
