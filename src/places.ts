@@ -6,6 +6,7 @@ export interface SuggestedPlace {
   importance: number
   sourceUrl: string
   popularity: string
+  pageId?: number
 }
 
 export interface PlaceBounds {
@@ -35,6 +36,34 @@ interface WikiPage {
 
 const cache = new Map<string, { time: number; places: SuggestedPlace[] }>()
 const cacheLifetime = 30 * 60_000
+
+interface PlacePreview {
+  extract?: string
+  thumbnail?: { source: string }
+  pageimage?: string
+}
+
+const previews = new Map<number, PlacePreview>()
+
+export async function loadPlacePreview(pageId: number, signal: AbortSignal): Promise<PlacePreview> {
+  const cached = previews.get(pageId)
+  if (cached) return cached
+  const params = new URLSearchParams({
+    action: 'query', format: 'json', formatversion: '2', origin: '*',
+    pageids: String(pageId), prop: 'extracts|pageimages',
+    exintro: '1', explaintext: '1', exchars: '240',
+    piprop: 'thumbnail|name', pithumbsize: '560', pilicense: 'free',
+  })
+  const response = await fetch('https://en.wikipedia.org/w/api.php?' + params, { signal })
+  if (!response.ok) throw new Error('Place preview is unavailable.')
+  const data: { error?: unknown; query?: { pages?: PlacePreview[] } } = await response.json()
+  if (data.error) throw new Error('Place preview is unavailable.')
+  signal.throwIfAborted()
+  const preview = data.query?.pages?.[0] ?? {}
+  previews.set(pageId, preview)
+  if (previews.size > 80) previews.delete(previews.keys().next().value!)
+  return preview
+}
 
 async function getPlaces(key: string, signal: AbortSignal | undefined, load: () => Promise<SuggestedPlace[]>) {
   signal?.throwIfAborted()
@@ -115,6 +144,7 @@ export async function suggestPlaces(bounds: PlaceBounds, signal?: AbortSignal): 
         importance: 1 / page.index,
         popularity: '#' + page.index + ' nearby by Wikipedia incoming links',
         sourceUrl: 'https://en.wikipedia.org/?curid=' + page.pageid,
+        pageId: page.pageid,
       }]
     }).sort((a, b) => b.importance - a.importance)
   })

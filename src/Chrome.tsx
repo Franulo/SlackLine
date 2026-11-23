@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 import { Brand, YarnBall } from './art';
 import './chrome.css';
 
@@ -12,6 +13,8 @@ type ChromeProps = {
   onTrips: () => void;
   onNotes: () => void;
   onTotal: (days: number) => void;
+  placeCard: ReactNode;
+  onShowTips: () => void;
 };
 
 export function PencilIcon() {
@@ -90,12 +93,15 @@ export function Chrome(props: ChromeProps) {
         <button type="button" aria-pressed={props.notes} onClick={props.onNotes}><NotesIcon/>{props.notes ? 'Hide notes' : 'Show notes'}</button>
       </nav>
     </header>
-    <Budget {...props}/>
-    {tipsOpen ? <aside className="sl-chrome-tips">
+    <div className="sl-chrome-sidebar">
+      <Budget {...props}/>
+      {props.placeCard}
+    </div>
+    {tipsOpen && !props.placeCard ? <aside className="sl-chrome-tips">
       <button className="sl-tips-close" type="button" aria-label="Close tips" onClick={() => setTipsOpen(false)}><CloseIcon/></button>
       <h2>Try it</h2>
       <ol><li>Pull the yarn onto the map to add a stop.</li><li>Drag a ball to move it, or drag its edge to change stay days.</li><li>Click a strand to plan travel days or write a note.</li></ol>
-    </aside> : <button type="button" className="sl-chrome-help" aria-label="Show tips" onClick={() => setTipsOpen(true)}>?</button>}
+    </aside> : <button type="button" className="sl-chrome-help" aria-label="Show tips" onClick={() => {props.onShowTips();setTipsOpen(true);}}>?</button>}
   </div>;
 }
 

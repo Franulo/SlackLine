@@ -66,7 +66,18 @@
   background: #fff; border: 2.5px solid var(--chrome-ink); border-radius: 18px;
   box-shadow: 4px 5px var(--chrome-ink); pointer-events: auto;
 }
-.sl-budget { top: var(--chrome-edge); width: var(--budget-width); }
+.sl-chrome-sidebar {
+  position: absolute;
+  top: var(--chrome-edge);
+  right: var(--chrome-edge);
+  bottom: max(96px, calc(var(--chrome-edge) + 54px));
+  width: var(--budget-width);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 12px;
+}
+.sl-budget { position: static; width: 100%; flex: none; }
 .sl-budget-label, .sl-budget-stepper, .sl-budget-count { display: flex; justify-content: space-between; align-items: center; }
 .sl-budget-label { font-size: .875rem; }
 .sl-budget-label span, .sl-budget-count small, .sl-budget p { color: #625f56; }
@@ -106,7 +117,8 @@
   .sl-chrome-header { top: 10px; right: 12px; align-items: flex-start; gap: 6px; }
   .sl-chrome-actions { gap: 6px; }
   .sl-chrome-actions button { min-height: 34px; padding: 4px 8px; font-size: .8125rem; }
-  .sl-budget { top: 76px; width: 180px; padding: 10px; }
+  .sl-chrome-sidebar { top: 76px; width: min(280px, calc(100vw - 2 * var(--chrome-edge))); bottom: 106px; }
+  .sl-budget { width: 180px; padding: 10px; }
   .sl-budget-label, .sl-budget-count small { font-size: .75rem; }
   .sl-budget-stepper { height: 36px; }
   .sl-budget-count { min-height: 44px; margin: 3px 0; gap: 7px; }
@@ -116,4 +128,18 @@
 }
 @media (max-height: 540px) {
   .sl-chrome-tips { left: var(--chrome-edge); right: auto; }
+  .sl-budget { padding: 8px 10px; }
+  .sl-budget-count { min-height: 34px; margin: 2px 0; }
+  .sl-budget-count > strong { font-size: 30px; }
+  .sl-budget-ball svg { max-height: 30px; }
+  .sl-budget-stepper { height: 32px; margin-top: 3px; }
+  .sl-budget-stepper button { width: 24px; height: 24px; }
+  .sl-budget p { display: none; }
+}
+@media (max-height: 410px) {
+  .sl-chrome-sidebar:has(.place-card) { bottom: 88px; gap: 8px; }
+}
+@media (max-height: 360px) {
+  .sl-chrome-sidebar:has(.place-card) { overflow-y: auto; padding: 0 5px 5px 0; pointer-events: auto; }
+  .sl-chrome-sidebar .place-card { flex: none; }
 }

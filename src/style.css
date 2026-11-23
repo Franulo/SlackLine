@@ -6,10 +6,35 @@
 h1,h2{font-family:Fraunces,Georgia,serif}button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible{outline:3px solid #bc7c00;outline-offset:2px}
 .planner,.basemap,.route-overlay{position:absolute;inset:0;width:100%;height:100%;overflow:hidden}.basemap{background:#e3ece9}.route-overlay{pointer-events:none;touch-action:none}
 .route-overlay>g>path{fill:none;stroke-linecap:round}.grab-leg{pointer-events:stroke;stroke:transparent;stroke-width:24;cursor:grab}.stop-center{fill:transparent;pointer-events:all;cursor:move}.stop-edge{fill:none;stroke:transparent;stroke-width:9;pointer-events:stroke;cursor:nwse-resize}
-.map-label,.place-pin text{font:700 14px Figtree,sans-serif;fill:#22302a;paint-order:stroke;stroke:#fff9ee;stroke-width:4px}.place-pin,.map-tag{pointer-events:all;cursor:pointer}.place-pin circle{fill:#ffc93c;stroke:#22302a;stroke-width:2}.map-tag rect{fill:#fff4da;stroke:#22302a;stroke-width:2}.map-tag text{font:700 12px Figtree;fill:#22302a}
+.map-label,.place-pin text{font:700 14px Figtree,sans-serif;fill:#22302a;paint-order:stroke;stroke:#fff9ee;stroke-width:4px}
+.place-pin{cursor:pointer}
+.place-pin-hit{fill:transparent;pointer-events:all}
+.place-pin-dot{fill:#2f8f6b;stroke:#fffdf7;stroke-width:1.5}
+.place-pin text{opacity:0;font-size:12px}
+.place-pin:hover text,.place-pin:focus-visible text,.place-pin[aria-expanded=true] text{opacity:1}
+.place-pin:hover .place-pin-dot,.place-pin:focus-visible .place-pin-dot,.place-pin[aria-expanded=true] .place-pin-dot{fill:#ffc93c;stroke:#22302a}
+.map-tag{pointer-events:all;cursor:pointer}.map-tag rect{fill:#fff4da;stroke:#22302a;stroke-width:2}.map-tag text{font:700 12px Figtree;fill:#22302a}
 .panel,.trip-list>button{background:#fffdf7;border:2px solid #22302a;border-radius:15px;box-shadow:4px 4px #22302a}.panel{padding:20px}
 .panel button,.date-controls>button,.library header button{background:white;border:1.7px solid #22302a;border-radius:8px;padding:7px 11px;font-weight:650}
-.editor,.place-card{position:absolute;left:20px;top:28%;width:min(310px,90vw);z-index:9}.editor h2,.place-card p{margin:8px 0}.dismiss,.place-card button{float:right}
+.editor{position:absolute;left:20px;top:28%;width:min(310px,90vw);z-index:9}.editor h2{margin:8px 0}.dismiss{float:right}
+.place-card{display:flex;flex-direction:column;width:min(280px,100%);min-height:0;max-height:100%;padding:0;overflow:hidden;pointer-events:auto}
+.place-card-header{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;padding:10px 12px;border-bottom:1px solid #e4ddce}
+.place-card h2{font-size:21px;margin:0;overflow-wrap:anywhere}
+.place-card button{display:grid;place-items:center;width:28px;height:28px;flex:none;padding:0}
+.place-card-body{overflow:auto;overscroll-behavior:contain;padding:8px 12px 12px}
+.place-card-body:focus-visible{outline:2px solid #bc7c00;outline-offset:-3px}
+.place-card button svg{width:14px;height:14px}
+.place-card p{font-size:14px;line-height:1.4;margin:8px 0}
+.place-card .place-summary{margin-top:0}
+.place-card small{display:block;margin-bottom:5px}
+.place-card a{color:#245e4b;font-size:13px}
+.place-guide{margin:0 0 10px;padding:9px;background:#f4f1e6;border-radius:8px}
+.place-guide h3{margin:0 0 7px;font:680 16px Fraunces,Georgia,serif}
+.place-guide blockquote{margin:0 0 8px;padding-left:8px;border-left:2px solid #2f8f6b}
+.place-guide blockquote strong{font-size:12px}
+.place-guide blockquote p{margin:2px 0}
+.place-photo{display:block}
+.place-photo img{display:block;width:100%;height:112px;object-fit:cover;border-radius:8px}
 .panel label{display:block;margin:12px 0 4px;font-weight:650}.editor input,.editor textarea,.date-controls input[type=date]{display:block;width:100%;padding:8px;border:1px solid #7a7466;border-radius:7px;background:white}.editor textarea{margin-top:4px;min-height:78px;resize:vertical}
 .date-controls{position:absolute;bottom:34px;left:64px;z-index:4}.date-controls .panel{position:absolute;bottom:45px;left:0;width:260px}.date-list{max-height:35vh;overflow:auto;padding-left:20px}.date-list small,.trip-list small{display:block}
 .map-message{position:fixed;bottom:40px;left:50%;transform:translateX(-50%);z-index:12;border-radius:12px;color:white;padding:10px 18px;background:#22302a}

@@ -3,7 +3,8 @@ import {createRoot} from 'react-dom/client'
 import {Ticket} from './Ticket'
 import {Brand,YarnBall} from './art'
 import {Chrome,CloseIcon,NotesIcon,PencilIcon} from './Chrome'
-import {RouteMap} from './RouteMap'
+import {PlaceCard,RouteMap} from './RouteMap'
+import type {SuggestedPlace} from './places'
 import {allocate,createTrip,distance,rangeLabel,remaining,removeStop} from './model'
 import type {Trip} from './model'
 import './style.css'
@@ -44,6 +45,7 @@ function App(){
   const [page,setPage]=useState<'ticket'|'planner'|'trips'>('trips')
   const [preview,setPreview]=useState<Trip|null>(null),[notes,setNotes]=useState(false)
   const [selected,select]=useState<Selection|null>(null),[dateOpen,setDateOpen]=useState(false),[error,setError]=useState('')
+  const [placeCard,setPlaceCard]=useState<SuggestedPlace|null>(null)
   function store(data:Library){
     setLibrary(data)
     try{localStorage.setItem(key,JSON.stringify(data));setError('')}
@@ -53,15 +55,20 @@ function App(){
     const exists=library.trips.some(item=>item.id===t.id)
     store({active:t.id,trips:exists?library.trips.map(item=>item.id===t.id?t:item):[t,...library.trips]})
   }
-  function open(t:Trip){save(t);select(null);setDateOpen(false);setPreview(null);setNotes(false);setPage('planner')}
+  function open(t:Trip){save(t);select(null);setPlaceCard(null);setDateOpen(false);setPreview(null);setNotes(false);setPage('planner')}
+  function selectPlace(place:SuggestedPlace|null){
+    setPlaceCard(place)
+    if(place){select(null);setDateOpen(false)}
+  }
   const live=preview??trip
   return <>{page==='ticket'?<Ticket onTrips={()=>setPage('trips')} onCreate={(...args)=>open(createTrip(...args))}/>:
     page==='trips'?<main className="library"><header><Brand/><button onClick={()=>setPage('ticket')}>New trip</button></header><section><h1>My trips</h1>
     {library.trips.length===0?<p>Your saved trips will appear here.</p>:<div className="trip-list">{library.trips.map(t=><button key={t.id} onClick={()=>open(t)}><YarnBall width="52" height="52"/><span><strong>{t.name}</strong><small>{t.stops[0].name} {t.mode==='loop'?'· Round trip':'→ '+t.stops.at(-1)?.name}</small></span><b>{t.total} days</b></button>)}</div>}</section></main>:
     trip&&live&&<main className="planner">
-      <RouteMap key={trip.id} trip={trip} notes={notes} preview={setPreview} commit={t=>{save(t);select(null)}} select={s=>{select(s);setDateOpen(false)}}/>
-      <Chrome name={trip.name} total={live.total} remaining={remaining(live)} routeLabel={trip.stops.map(s=>s.name).join(' → ')+(trip.mode==='loop'?' ↺':'')} notes={notes} onName={name=>save({...trip,name})} onTrips={()=>setPage('trips')} onTotal={total=>save({...trip,total})} onNotes={()=>{setNotes(!notes);select(null)}}/>
-      <div className="date-controls"><button aria-expanded={dateOpen} onClick={()=>{setDateOpen(!dateOpen);select(null)}}>{trip.absolute?'Calendar dates':'Relative days'} ▾</button>
+      <RouteMap key={trip.id} trip={trip} notes={notes} preview={setPreview} commit={t=>{save(t);select(null);setPlaceCard(null)}} select={s=>{select(s);setDateOpen(false);setPlaceCard(null)}} placeCard={placeCard} selectPlace={selectPlace}/>
+      <Chrome name={trip.name} total={live.total} remaining={remaining(live)} routeLabel={trip.stops.map(s=>s.name).join(' → ')+(trip.mode==='loop'?' ↺':'')} notes={notes} onName={name=>save({...trip,name})} onTrips={()=>setPage('trips')} onTotal={total=>save({...trip,total})} onNotes={()=>{setNotes(!notes);select(null)}}
+        placeCard={placeCard&&<PlaceCard key={placeCard.sourceUrl} place={placeCard} close={()=>setPlaceCard(null)}/>} onShowTips={()=>setPlaceCard(null)}/>
+      <div className="date-controls"><button aria-expanded={dateOpen} onClick={()=>{setDateOpen(!dateOpen);select(null);setPlaceCard(null)}}>{trip.absolute?'Calendar dates':'Relative days'} ▾</button>
       {dateOpen&&<div className="panel"><label>Trip start<input type="date" value={trip.startDate} onChange={e=>save({...trip,startDate:e.target.value,absolute:!!e.target.value&&trip.absolute})}/></label>
       <label><input type="checkbox" disabled={!trip.startDate} checked={trip.absolute} onChange={e=>save({...trip,absolute:e.target.checked})}/> Show calendar dates</label>
       <ol className="date-list">{trip.stops.map((s,i)=><li key={s.id}>{s.name} · {rangeLabel(trip,i)}{trip.legs[i]?.days>0&&<small>Travel · {rangeLabel(trip,i,true)}</small>}</li>)}</ol></div>}</div>

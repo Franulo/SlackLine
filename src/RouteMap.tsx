@@ -4,13 +4,16 @@ import maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import {allocate,distance,insert,remaining} from './model'
 import type {Trip,Place} from './model'
-import {suggestPlaces} from './places'
+import {loadPlacePreview,suggestPlaces} from './places'
+import type {SuggestedPlace} from './places'
+import {CloseIcon} from './Chrome'
+import {loadTravelGuide} from './travelGuide'
 import {YarnBall,Cat} from './art'
 
 type Point = {x:number;y:number}
 type Drag = {kind:'pull'|'move'|'size';index:number;origin:Point;base:Trip;draft:Trip;started:boolean;radius:number}
 type Selection = {kind:'stops'|'legs'; index:number}
-type Props = {trip:Trip; notes:boolean; commit:(trip:Trip)=>void; preview:(trip:Trip|null)=>void; select:(s:Selection)=>void}
+type Props = {trip:Trip; notes:boolean; commit:(trip:Trip)=>void; preview:(trip:Trip|null)=>void; select:(s:Selection)=>void; placeCard:SuggestedPlace|null; selectPlace:(place:SuggestedPlace|null)=>void}
 const radius = (days:number)=>15+3.8*Math.sqrt(days)*Math.sqrt(Math.min(6,days))
 const km = (a:Place,b:Place)=>Math.round(distance(a,b)).toLocaleString()+' km'
 const mid = (a:Point,b:Point)=>({x:(a.x+b.x)/2,y:(a.y+b.y)/2})
@@ -59,13 +62,71 @@ function startShimmer(m:maplibregl.Map,busy:()=>boolean){
     try{m.setPaintProperty('water','fill-color','rgb('+c.join(',')+')')}catch{}
   },100)
 }
+
+export function PlaceCard({place,close}:{place:SuggestedPlace;close:()=>void}){
+  const [preview,setPreview]=useState<Awaited<ReturnType<typeof loadPlacePreview>>>()
+  const [guide,setGuide]=useState<Awaited<ReturnType<typeof loadTravelGuide>>>()
+  const [imageFailed,setImageFailed]=useState(false)
+  const closeButton=useRef<HTMLButtonElement>(null)
+  const opener=useRef<Element|null>(null)
+  useEffect(()=>{
+    opener.current=document.activeElement
+    closeButton.current?.focus()
+  },[])
+  function dismiss(){
+    close()
+    if(opener.current instanceof SVGElement)opener.current.focus({preventScroll:true})
+  }
+  useEffect(()=>{
+    if(place.pageId===undefined)return
+    const controller=new AbortController()
+    const timeout=setTimeout(()=>controller.abort(),8000)
+    const {signal}=controller
+    loadPlacePreview(place.pageId,signal).then(data=>{
+      if(!signal.aborted)setPreview(data)
+    }).catch(()=>{/* The short description is available immediately. */})
+    loadTravelGuide(place.name,signal).then(data=>{
+      if(!signal.aborted)setGuide(data)
+    }).catch(()=>{/* The Wikipedia preview remains available independently. */})
+    return ()=>{clearTimeout(timeout);controller.abort()}
+  },[place.name,place.pageId])
+  return <aside className="place-card panel" aria-label={place.name} onKeyDown={e=>{
+    if(e.key==='Escape'){e.stopPropagation();dismiss()}
+  }}>
+    <header className="place-card-header">
+      <h2>{place.name}</h2>
+      <button type="button" ref={closeButton} aria-label="Close place information" onClick={dismiss}><CloseIcon/></button>
+    </header>
+    <div className="place-card-body" tabIndex={0} role="region" aria-label="Place details">
+      <p className="place-summary">{place.description}</p>
+      {guide&&<section className="place-guide">
+        {guide.notes.length>0&&<>
+          <h3>Backpacker notes</h3>
+          {guide.notes.map(note=><blockquote key={note.label} cite={guide.url}>
+            <strong>{note.label}</strong>
+            <p><q>{note.quote}</q></p>
+          </blockquote>)}
+        </>}
+        <a href={guide.url} target="_blank" rel="noreferrer">Wikivoyage travel guide ↗</a>
+        {guide.notes.length>0&&<> · <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noreferrer">CC BY-SA 4.0</a></>}
+      </section>}
+      {preview?.thumbnail&&preview.pageimage&&!imageFailed&&
+        <a className="place-photo" href={'https://en.wikipedia.org/wiki/File:'+encodeURIComponent(preview.pageimage)} target="_blank" rel="noreferrer" aria-label={'Photo of '+place.name+' and credits'}>
+          <img src={preview.thumbnail.source} alt={place.name} onError={()=>setImageFailed(true)}/>
+        </a>}
+      {preview?.extract?.trim()&&<p>{preview.extract.trim()}</p>}
+      <small>{place.popularity}</small>
+      <a href={place.sourceUrl} target="_blank" rel="noreferrer">Read on Wikipedia ↗</a>
+    </div>
+  </aside>
+}
 export function RouteMap(props:Props){
   const host=useRef<HTMLDivElement>(null), svg=useRef<SVGSVGElement>(null), map=useRef<maplibregl.Map|null>(null)
   const current=useRef(props); current.current=props
   const drag=useRef<Drag|null>(null), clouds=useRef<HTMLDivElement>(null)
   const [,redraw]=useState(0), [message,setMessage]=useState(''), [hint,setHint]=useState('')
   const [places,setPlaces]=useState<Awaited<ReturnType<typeof suggestPlaces>>>([])
-  const [placeCard,setPlaceCard]=useState<(typeof places)[number]|null>(null)
+  const {placeCard,selectPlace}=props
   const [camera,setCamera]=useState(0)
   const [sel,setSel]=useState<{id:string;angle:number}|null>(null)
   useEffect(()=>{
@@ -81,7 +142,7 @@ export function RouteMap(props:Props){
     if(first.stops.length>1) engine.fitBounds(bounds,{padding:{left:64,right:Math.min(330,innerWidth*.27),top:140,bottom:100},duration:0,maxZoom:9})
     engine.addControl(new maplibregl.NavigationControl({showCompass:false}),'bottom-left')
     engine.on('move',()=>{redraw(v=>v+1);if(clouds.current)clouds.current.style.opacity=engine.getZoom()>11?'0':''})
-    engine.on('resize',()=>redraw(v=>v+1))
+    engine.on('resize',()=>{redraw(v=>v+1);setCamera(v=>v+1)})
     engine.on('moveend',()=>{if(import.meta.env.DEV)(window as any).__moveend=performance.now();setCamera(v=>v+1)})
     engine.on('load',()=>{if(!import.meta.env.VITE_MAPTILER_KEY){paintMap(engine);shimmer=startShimmer(engine,()=>!!drag.current)};setMessage('');setCamera(v=>v+1)})
     engine.on('error',()=>{if(!engine.isStyleLoaded())setMessage('Map tiles are unavailable. Check your connection.')})
@@ -95,7 +156,7 @@ export function RouteMap(props:Props){
         const length=path.getTotalLength()
         for(let i=0;i<=24;i++){const p=path.getPointAtLength(length*i/24),d=Math.hypot(e.point.x-p.x,e.point.y-p.y);if(d<best){best=d;nearest=index}}
       })
-      commit(insert(trip,nearest,place));setPlaceCard(null)
+      commit(insert(trip,nearest,place))
     })
     redraw(v=>v+1);setCamera(v=>v+1)
     return ()=>{clearInterval(shimmer);map.current=null;engine.remove()}
@@ -104,13 +165,16 @@ export function RouteMap(props:Props){
     if(!map.current)return
     const controller=new AbortController(), engine=map.current
     const timer=setTimeout(async()=>{
+      if(engine.isMoving()||controller.signal.aborted)return
       const b=engine.getBounds()
       if(engine.getZoom()<4){setPlaces([]);return}
       try{const result=await suggestPlaces({west:b.getWest(),east:b.getEast(),north:b.getNorth(),south:b.getSouth()},controller.signal)
         if(!controller.signal.aborted){setPlaces(result);if(import.meta.env.DEV)requestAnimationFrame(()=>{(window as any).__placesAt=performance.now()})}
       }catch{if(!controller.signal.aborted)setPlaces([])}
     },250)
-    return ()=>{clearTimeout(timer);controller.abort()}
+    const cancel=()=>{clearTimeout(timer);controller.abort()}
+    engine.on('movestart',cancel)
+    return ()=>{engine.off('movestart',cancel);cancel()}
   },[camera])
   useEffect(()=>{if(message){const t=setTimeout(()=>setMessage(''),6000);return ()=>clearTimeout(t)}},[message])
   const engine=map.current, trip=drag.current?.draft??props.trip
@@ -126,7 +190,7 @@ export function RouteMap(props:Props){
     drag.current={kind,index,origin,base:props.trip,draft:props.trip,started:false,radius:p?Math.hypot(origin.x-p.x,origin.y-p.y):0}
     svg.current!.setPointerCapture(e.pointerId)
     if(kind==='size'&&p)setSel({id:trip.stops[index].id,angle:Math.atan2(origin.y-p.y,origin.x-p.x)})
-    setPlaceCard(null)
+    selectPlace(null)
   }
   function move(e:ReactPointer){
     const d=drag.current
@@ -169,7 +233,18 @@ export function RouteMap(props:Props){
   }
   const c=slack?'#e4572e':'#2f8f6b'
   return <><div className="basemap" ref={host}/>{!new URLSearchParams(location.search).has('nofx')&&<div className="clouds" ref={clouds} aria-hidden="true"><i/><i/></div>}<svg ref={svg} className="route-overlay" aria-label="Trip yarn and stops" onPointerMove={move} onPointerUp={()=>end(false)} onPointerCancel={()=>end(true)} onLostPointerCapture={()=>end(true)}>
-    {engine&&places.map((s,i)=>{const p=engine.project([s.lng,s.lat]);return <g className="place-pin" key={i} transform={`translate(${p.x},${p.y})`} onClick={()=>setPlaceCard(s)}><title>{s.name}</title><circle r="8"/><text x="12" y="4">{s.name}</text></g>})}
+    {engine&&places.map(s=>{
+      const lng=s.lng+360*Math.round((engine.getCenter().lng-s.lng)/360)
+      const p=engine.project([lng,s.lat])
+      return <g className="place-pin" key={s.sourceUrl} transform={`translate(${p.x},${p.y})`}
+        role="button" tabIndex={0} aria-label={s.name} aria-expanded={placeCard?.sourceUrl===s.sourceUrl}
+        onClick={()=>selectPlace(s)} onKeyDown={e=>{
+          if(e.key==='Enter'||e.key===' '){e.preventDefault();selectPlace(s)}
+          if(e.key==='Escape')selectPlace(null)
+        }}>
+        <title>{s.name}</title><circle className="place-pin-hit" r="11"/><circle className="place-pin-dot" r="4.5"/><text x="10" y="4">{s.name}</text>
+      </g>
+    })}
     {legs.map(({path,center},i)=><g key={trip.legs[i].id}>
       <path d={path} stroke="#22302a" strokeWidth="8"/><path d={path} stroke={c} strokeWidth="5.5"/><path d={path} stroke="#ffd9bd" strokeWidth="1.8" strokeDasharray="5 5"/>
       <path data-leg={i} className="grab-leg" d={path} onPointerDown={e=>begin(e,'pull',i)}/>
@@ -187,7 +262,6 @@ export function RouteMap(props:Props){
       {props.notes&&<g className="map-tag" transform={`translate(${r},${-r})`} onClick={()=>props.select({kind:'stops',index:i})}><rect width="25" height="20" rx="4"/><text x="5" y="15">✉</text></g>}
     </g>})}
   </svg>
-  {placeCard&&<aside className="place-card panel"><button aria-label="Close place information" onClick={()=>setPlaceCard(null)}>×</button><strong>{placeCard.name}</strong><p>{placeCard.description}</p><small>{placeCard.popularity} · <a href={placeCard.sourceUrl} target="_blank" rel="noreferrer">Wikipedia</a></small></aside>}
   {(hint||message)&&<output className="map-message">{hint||message}</output>}</>
 }
 
