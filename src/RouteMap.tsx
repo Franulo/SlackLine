@@ -1,4 +1,4 @@
-﻿import {useEffect,useRef,useState} from 'react'
+import {useEffect,useRef,useState} from 'react'
 import type {PointerEvent as ReactPointer} from 'react'
 import maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
@@ -25,30 +25,65 @@ function curve(a:Point,b:Point,sag:number,loop:boolean,single:boolean) {
   const m=mid(a,b), c={x:m.x-direction*dy/len*bend,y:m.y+direction*dx/len*bend}
   return {path:`M ${a.x} ${a.y} Q ${c.x} ${c.y} ${b.x} ${b.y}`,center:mid(m,c)}
 }
+// Warm, muted palette so the red yarn stays the loudest thing on the map.
+const palette:[string,string,string][]=[
+  ['background','background-color','#f3ecdc'],['water','fill-color','#a9d3d6'],
+  ['waterway_river','line-color','#8fc4c9'],['waterway_other','line-color','#8fc4c9'],
+  ['park','fill-color','#cfe3b4'],['landcover_wood','fill-color','#b9d79a'],['landcover_grass','fill-color','#d6e6b6'],
+  ['landcover_sand','fill-color','#f1e2b0'],['landcover_ice','fill-color','#e8f1f0'],['landcover_wetland','fill-color','#c4dcc0'],
+  ['landuse_residential','fill-color','#ead9bd'],['building','fill-color','#dcc9aa'],['building-3d','fill-extrusion-color','#dcc9aa'],
+  ['road_motorway','line-color','#e4572e'],['road_trunk_primary','line-color','#ffc93c'],['road_secondary_tertiary','line-color','#fff2c4'],
+  ['road_minor','line-color','#fffaf0'],['road_motorway_casing','line-color','#b8431f'],
+  ['boundary_2','line-color','#7a6a57'],['water_name_point_label','text-color','#2f6f78'],['water_name_line_label','text-color','#2f6f78']
+]
+const clutter=['poi_r20','poi_r7','poi_r1','poi_transit','road_one_way_arrow','road_one_way_arrow_opposite']
+function paintMap(m:maplibregl.Map){
+  for(const [id,prop,value] of palette){try{if(m.getLayer(id))m.setPaintProperty(id,prop as never,value)}catch{}}
+  if(!new URLSearchParams(location.search).has('nohill')&&!m.getSource('relief')){
+    try{
+      m.addSource('relief',{type:'raster-dem',encoding:'terrarium',tiles:['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'],tileSize:256,maxzoom:12,attribution:'Terrain: Mapzen, AWS Terrain Tiles'})
+      m.addLayer({id:'relief-shade',type:'hillshade',source:'relief',maxzoom:12,paint:{'hillshade-exaggeration':.35,'hillshade-shadow-color':'#7a5a3c','hillshade-highlight-color':'#fff6df','hillshade-accent-color':'#a98a63','hillshade-illumination-direction':335}},m.getLayer('waterway_tunnel')?'waterway_tunnel':undefined)
+    }catch{}
+  }
+  for(const id of clutter){try{if(m.getLayer(id))m.setLayoutProperty(id,'visibility','none')}catch{}}
+}
+// Gentle sea shimmer: repaints only while the camera is still, slow, and on screen.
+function startShimmer(m:maplibregl.Map,busy:()=>boolean){
+  const calm=matchMedia('(prefers-reduced-motion: reduce)').matches||new URLSearchParams(location.search).has('nofx')
+  if(calm||!m.getLayer('water'))return undefined
+  const a=[176,218,220],b=[120,181,198]
+  return window.setInterval(()=>{
+    if(document.hidden||busy()||m.isMoving()||m.getZoom()>12.5)return
+    const k=(Math.sin(performance.now()/1400)+1)/2
+    const c=a.map((v,i)=>Math.round(v+(b[i]-v)*k))
+    try{m.setPaintProperty('water','fill-color','rgb('+c.join(',')+')')}catch{}
+  },100)
+}
 export function RouteMap(props:Props){
   const host=useRef<HTMLDivElement>(null), svg=useRef<SVGSVGElement>(null), map=useRef<maplibregl.Map|null>(null)
   const current=useRef(props); current.current=props
-  const drag=useRef<Drag|null>(null)
+  const drag=useRef<Drag|null>(null), clouds=useRef<HTMLDivElement>(null)
   const [,redraw]=useState(0), [message,setMessage]=useState(''), [hint,setHint]=useState('')
   const [places,setPlaces]=useState<Awaited<ReturnType<typeof suggestPlaces>>>([])
   const [placeCard,setPlaceCard]=useState<(typeof places)[number]|null>(null)
   const [camera,setCamera]=useState(0)
+  const [sel,setSel]=useState<{id:string;angle:number}|null>(null)
   useEffect(()=>{
     const first=current.current.trip
-    let engine:maplibregl.Map
+    let engine:maplibregl.Map, shimmer:number|undefined
     try{
       const key=import.meta.env.VITE_MAPTILER_KEY
-      engine=new maplibregl.Map({container:host.current!, style:key?'https://api.maptiler.com/maps/streets-v2/style.json?key='+encodeURIComponent(key):'https://tiles.openfreemap.org/styles/positron', center:[first.stops[0].lng,first.stops[0].lat],zoom:7,attributionControl:{compact:true},dragRotate:false,pitchWithRotate:false})
+      engine=new maplibregl.Map({container:host.current!, style:key?'https://api.maptiler.com/maps/streets-v2/style.json?key='+encodeURIComponent(key):'https://tiles.openfreemap.org/styles/liberty', center:[first.stops[0].lng,first.stops[0].lat],zoom:7,attributionControl:{compact:true},dragRotate:false,pitchWithRotate:false})
     }catch{setMessage('The map needs WebGL. Enable graphics acceleration and reload.');return}
     map.current=engine
     const bounds=new maplibregl.LngLatBounds()
     first.stops.forEach(s=>bounds.extend([s.lng,s.lat]))
     if(first.stops.length>1) engine.fitBounds(bounds,{padding:{left:64,right:Math.min(330,innerWidth*.27),top:140,bottom:100},duration:0,maxZoom:9})
     engine.addControl(new maplibregl.NavigationControl({showCompass:false}),'bottom-left')
-    engine.on('move',()=>redraw(v=>v+1))
+    engine.on('move',()=>{redraw(v=>v+1);if(clouds.current)clouds.current.style.opacity=engine.getZoom()>11?'0':''})
     engine.on('resize',()=>redraw(v=>v+1))
-    engine.on('moveend',()=>setCamera(v=>v+1))
-    engine.on('load',()=>{setMessage('');setCamera(v=>v+1)})
+    engine.on('moveend',()=>{if(import.meta.env.DEV)(window as any).__moveend=performance.now();setCamera(v=>v+1)})
+    engine.on('load',()=>{if(!import.meta.env.VITE_MAPTILER_KEY){paintMap(engine);shimmer=startShimmer(engine,()=>!!drag.current)};setMessage('');setCamera(v=>v+1)})
     engine.on('error',()=>{if(!engine.isStyleLoaded())setMessage('Map tiles are unavailable. Check your connection.')})
     engine.on('click',e=>{
       const {trip,commit}=current.current
@@ -63,7 +98,7 @@ export function RouteMap(props:Props){
       commit(insert(trip,nearest,place));setPlaceCard(null)
     })
     redraw(v=>v+1);setCamera(v=>v+1)
-    return ()=>{map.current=null;engine.remove()}
+    return ()=>{clearInterval(shimmer);map.current=null;engine.remove()}
   },[])
   useEffect(()=>{
     if(!map.current)return
@@ -72,7 +107,7 @@ export function RouteMap(props:Props){
       const b=engine.getBounds()
       if(engine.getZoom()<4){setPlaces([]);return}
       try{const result=await suggestPlaces({west:b.getWest(),east:b.getEast(),north:b.getNorth(),south:b.getSouth()},controller.signal)
-        if(!controller.signal.aborted)setPlaces(result)
+        if(!controller.signal.aborted){setPlaces(result);if(import.meta.env.DEV)requestAnimationFrame(()=>{(window as any).__placesAt=performance.now()})}
       }catch{if(!controller.signal.aborted)setPlaces([])}
     },250)
     return ()=>{clearTimeout(timer);controller.abort()}
@@ -90,6 +125,7 @@ export function RouteMap(props:Props){
     const p=points[index]
     drag.current={kind,index,origin,base:props.trip,draft:props.trip,started:false,radius:p?Math.hypot(origin.x-p.x,origin.y-p.y):0}
     svg.current!.setPointerCapture(e.pointerId)
+    if(kind==='size'&&p)setSel({id:trip.stops[index].id,angle:Math.atan2(origin.y-p.y,origin.x-p.x)})
     setPlaceCard(null)
   }
   function move(e:ReactPointer){
@@ -115,6 +151,7 @@ export function RouteMap(props:Props){
       const old=base.stops[index], center=engine.project([old.lng,old.lat])
       const delta=Math.hypot(p.x-center.x,p.y-center.y)-d.radius
       d.draft=allocate(base,'stops',index,old.days+Math.round(delta/4))
+      setSel({id:old.id,angle:Math.atan2(p.y-center.y,p.x-center.x)})
     }
     props.preview(d.draft);redraw(v=>v+1)
   }
@@ -123,12 +160,15 @@ export function RouteMap(props:Props){
     drag.current=null;props.preview(null);setHint('')
     if(!cancel){
       if(d.started&&d.draft!==d.base)props.commit(d.draft)
-      else if(!d.started)props.select({kind:d.kind==='pull'?'legs':'stops',index:d.index})
+      else if(!d.started){
+        if(d.kind==='move'){const id=d.base.stops[d.index].id;setSel(v=>v?.id===id?null:{id,angle:-Math.PI/4})}
+        props.select({kind:d.kind==='pull'?'legs':'stops',index:d.index})
+      }
     }
     redraw(v=>v+1)
   }
   const c=slack?'#e4572e':'#2f8f6b'
-  return <><div className="basemap" ref={host}/><svg ref={svg} className="route-overlay" aria-label="Trip yarn and stops" onPointerMove={move} onPointerUp={()=>end(false)} onPointerCancel={()=>end(true)} onLostPointerCapture={()=>end(true)}>
+  return <><div className="basemap" ref={host}/>{!new URLSearchParams(location.search).has('nofx')&&<div className="clouds" ref={clouds} aria-hidden="true"><i/><i/></div>}<svg ref={svg} className="route-overlay" aria-label="Trip yarn and stops" onPointerMove={move} onPointerUp={()=>end(false)} onPointerCancel={()=>end(true)} onLostPointerCapture={()=>end(true)}>
     {engine&&places.map((s,i)=>{const p=engine.project([s.lng,s.lat]);return <g className="place-pin" key={i} transform={`translate(${p.x},${p.y})`} onClick={()=>setPlaceCard(s)}><title>{s.name}</title><circle r="8"/><text x="12" y="4">{s.name}</text></g>})}
     {legs.map(({path,center},i)=><g key={trip.legs[i].id}>
       <path d={path} stroke="#22302a" strokeWidth="8"/><path d={path} stroke={c} strokeWidth="5.5"/><path d={path} stroke="#ffd9bd" strokeWidth="1.8" strokeDasharray="5 5"/>
@@ -140,6 +180,9 @@ export function RouteMap(props:Props){
       <YarnBall x={-r} y={-r} width={2*r} height={2*r} green={!slack}/>
       <circle className="stop-center" r={Math.max(9,r-5)} onPointerDown={e=>begin(e,'move',i)}><title>{s.name} · Drag to move or click for details</title></circle>
       <circle className="stop-edge" r={r} onPointerDown={e=>begin(e,'size',i)}><title>Drag edge to resize stay</title></circle>
+      {sel?.id===s.id&&(()=>{const cx=Math.cos(sel.angle),cy=Math.sin(sel.angle),x1=cx*(r-6),y1=cy*(r-6),x2=cx*(r+38),y2=cy*(r+38);return <g className="stop-handle" onPointerDown={e=>begin(e,'size',i)}>
+        <line x1={x1} y1={y1} x2={x2} y2={y2} stroke="#22302a" strokeWidth="7.5" strokeLinecap="round"/><line x1={x1} y1={y1} x2={x2} y2={y2} stroke="#c99a62" strokeWidth="4" strokeLinecap="round"/>
+        <line className="stop-handle-hit" x1={x1} y1={y1} x2={x2} y2={y2}/><circle cx={x2} cy={y2} r="10" fill="#ffc93c" stroke="#22302a" strokeWidth="2.8"><title>Drag to change days</title></circle></g>})()}
       <text className="map-label" textAnchor="middle" y={r+18}>{s.name} · {s.days}d</text>
       {props.notes&&<g className="map-tag" transform={`translate(${r},${-r})`} onClick={()=>props.select({kind:'stops',index:i})}><rect width="25" height="20" rx="4"/><text x="5" y="15">✉</text></g>}
     </g>})}
