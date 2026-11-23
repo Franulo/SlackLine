@@ -1,5 +1,6 @@
 import {useEffect,useRef,useState} from 'react'
 import type {PointerEvent as ReactPointer} from 'react'
+import {flushSync} from 'react-dom'
 import maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import {allocate,distance,insert,remaining} from './model'
@@ -15,6 +16,8 @@ type Drag = {kind:'pull'|'move'|'size';index:number;origin:Point;base:Trip;draft
 type Selection = {kind:'stops'|'legs'; index:number}
 type Props = {trip:Trip; notes:boolean; commit:(trip:Trip)=>void; preview:(trip:Trip|null)=>void; select:(s:Selection)=>void; placeCard:SuggestedPlace|null; selectPlace:(place:SuggestedPlace|null)=>void}
 const radius = (days:number)=>15+3.8*Math.sqrt(days)*Math.sqrt(Math.min(6,days))
+const ballScale = (zoom:number)=>Math.max(.28,Math.min(1,2**((zoom-7)/2.5)))
+const nearbyLongitude = (lng:number,reference:number)=>lng+360*Math.round((reference-lng)/360)
 const km = (a:Place,b:Place)=>Math.round(distance(a,b)).toLocaleString()+' km'
 const mid = (a:Point,b:Point)=>({x:(a.x+b.x)/2,y:(a.y+b.y)/2})
 function curve(a:Point,b:Point,sag:number,loop:boolean,single:boolean) {
@@ -141,8 +144,16 @@ export function RouteMap(props:Props){
     first.stops.forEach(s=>bounds.extend([s.lng,s.lat]))
     if(first.stops.length>1) engine.fitBounds(bounds,{padding:{left:64,right:Math.min(330,innerWidth*.27),top:140,bottom:100},duration:0,maxZoom:9})
     engine.addControl(new maplibregl.NavigationControl({showCompass:false}),'bottom-left')
-    engine.on('move',()=>{redraw(v=>v+1);if(clouds.current)clouds.current.style.opacity=engine.getZoom()>11?'0':''})
-    engine.on('resize',()=>{redraw(v=>v+1);setCamera(v=>v+1)})
+    let cameraDirty=true
+    engine.on('move',()=>{cameraDirty=true})
+    engine.on('resize',()=>{cameraDirty=true;setCamera(v=>v+1)})
+    engine.on('render',()=>{
+      if(!cameraDirty)return
+      cameraDirty=false
+      // Apply the SVG positions in the same frame as the map camera.
+      flushSync(()=>redraw(v=>v+1))
+      if(clouds.current)clouds.current.style.opacity=engine.getZoom()>11?'0':''
+    })
     engine.on('moveend',()=>{if(import.meta.env.DEV)(window as any).__moveend=performance.now();setCamera(v=>v+1)})
     engine.on('load',()=>{if(!import.meta.env.VITE_MAPTILER_KEY){paintMap(engine);shimmer=startShimmer(engine,()=>!!drag.current)};setMessage('');setCamera(v=>v+1)})
     engine.on('error',()=>{if(!engine.isStyleLoaded())setMessage('Map tiles are unavailable. Check your connection.')})
@@ -178,7 +189,13 @@ export function RouteMap(props:Props){
   },[camera])
   useEffect(()=>{if(message){const t=setTimeout(()=>setMessage(''),6000);return ()=>clearTimeout(t)}},[message])
   const engine=map.current, trip=drag.current?.draft??props.trip
-  const points=engine?trip.stops.map(s=>engine.project([s.lng,s.lat])):[]
+  const centerLng=engine?.getCenter().lng??0
+  let routeLng=centerLng
+  const points=engine?trip.stops.map(s=>{
+    routeLng=nearbyLongitude(s.lng,routeLng)
+    return engine.project([routeLng,s.lat])
+  }):[]
+  const scale=ballScale(engine?.getZoom()??7)
   const slack=remaining(trip), ratio=slack/trip.total
   const legs=points.length?trip.legs.map((_,i)=>curve(points[i],points[(i+1)%points.length],ratio,trip.mode==='loop',points.length===1)):[]
   function point(e:ReactPointer){const box=svg.current!.getBoundingClientRect();return {x:e.clientX-box.left,y:e.clientY-box.top}}
@@ -199,23 +216,26 @@ export function RouteMap(props:Props){
     if(!d.started && Math.hypot(p.x-d.origin.x,p.y-d.origin.y)<4)return
     d.started=true
     if(d.kind==='pull'&&remaining(base)===0){setMessage('Trip is full. Shorten a stay or add a day.');return}
-    const ll=engine.unproject([p.x,p.y]).wrap()
-    let place:Place={lng:ll.lng,lat:ll.lat,name:'Map stop'}
-    let best=26
-    for(const item of places){const q=engine.project([item.lng,item.lat]),dist=Math.hypot(q.x-p.x,q.y-p.y)
-      if(dist<best){place=item;best=dist}}
-    if(d.kind==='pull'){
-      if(d.draft===base)d.draft=insert(base,index,place)
-      d.draft={...d.draft,stops:d.draft.stops.map((s,i)=>i===index+1?{...s,...place}:s)}
-      const next=base.stops[(index+1)%base.stops.length]
-      setHint(base.stops.length===1?km(base.stops[0],place)+' each way':km(base.stops[index],place)+' · '+km(place,next))
-    }else if(d.kind==='move'){
-      d.draft={...base,stops:base.stops.map((s,i)=>i===index?{...s,...place,name:best<26?place.name:'Map stop'}:s)}
-    }else {
-      const old=base.stops[index], center=engine.project([old.lng,old.lat])
+    if(d.kind==='size'){
+      const old=base.stops[index], center=points[index]
       const delta=Math.hypot(p.x-center.x,p.y-center.y)-d.radius
       d.draft=allocate(base,'stops',index,old.days+Math.round(delta/4))
       setSel({id:old.id,angle:Math.atan2(p.y-center.y,p.x-center.x)})
+    }else{
+      const ll=engine.unproject([p.x,p.y])
+      const wrapped=ll.wrap()
+      let place:Place={lng:wrapped.lng,lat:wrapped.lat,name:'Map stop'}
+      let best=26
+      for(const item of places){const q=engine.project([nearbyLongitude(item.lng,ll.lng),item.lat]),dist=Math.hypot(q.x-p.x,q.y-p.y)
+        if(dist<best){place=item;best=dist}}
+      if(d.kind==='pull'){
+        if(d.draft===base)d.draft=insert(base,index,place)
+        d.draft={...d.draft,stops:d.draft.stops.map((s,i)=>i===index+1?{...s,...place}:s)}
+        const next=base.stops[(index+1)%base.stops.length]
+        setHint(base.stops.length===1?km(base.stops[0],place)+' each way':km(base.stops[index],place)+' · '+km(place,next))
+      }else{
+        d.draft={...base,stops:base.stops.map((s,i)=>i===index?{...s,...place}:s)}
+      }
     }
     props.preview(d.draft);redraw(v=>v+1)
   }
@@ -234,7 +254,7 @@ export function RouteMap(props:Props){
   const c=slack?'#e4572e':'#2f8f6b'
   return <><div className="basemap" ref={host}/>{!new URLSearchParams(location.search).has('nofx')&&<div className="clouds" ref={clouds} aria-hidden="true"><i/><i/></div>}<svg ref={svg} className="route-overlay" aria-label="Trip yarn and stops" onPointerMove={move} onPointerUp={()=>end(false)} onPointerCancel={()=>end(true)} onLostPointerCapture={()=>end(true)}>
     {engine&&places.map(s=>{
-      const lng=s.lng+360*Math.round((engine.getCenter().lng-s.lng)/360)
+      const lng=nearbyLongitude(s.lng,centerLng)
       const p=engine.project([lng,s.lat])
       return <g className="place-pin" key={s.sourceUrl} transform={`translate(${p.x},${p.y})`}
         role="button" tabIndex={0} aria-label={s.name} aria-expanded={placeCard?.sourceUrl===s.sourceUrl}
@@ -251,10 +271,10 @@ export function RouteMap(props:Props){
       {props.notes&&<g className="map-tag" onClick={()=>props.select({kind:'legs',index:i})} transform={`translate(${center.x},${center.y+15})`}><rect x="-22" y="-10" width="44" height="22" rx="5"/><text textAnchor="middle" y="5">✉ {trip.legs[i].days}d</text></g>}
     </g>)}
     {legs.length>0&&<Cat x={legs[0].center.x-20} y={legs[0].center.y-41} width="40" height="44" mood={slack?'wobbly':'celebrate'}/>}
-    {points.map((p,i)=>{const s=trip.stops[i],r=radius(s.days);return <g key={s.id} transform={`translate(${p.x},${p.y})`}>
+    {points.map((p,i)=>{const s=trip.stops[i],r=radius(s.days)*scale,edgeWidth=Math.min(9,r*.6);return <g key={s.id} transform={`translate(${p.x},${p.y})`}>
       <YarnBall x={-r} y={-r} width={2*r} height={2*r} green={!slack}/>
-      <circle className="stop-center" r={Math.max(9,r-5)} onPointerDown={e=>begin(e,'move',i)}><title>{s.name} · Drag to move or click for details</title></circle>
-      <circle className="stop-edge" r={r} onPointerDown={e=>begin(e,'size',i)}><title>Drag edge to resize stay</title></circle>
+      <circle className="stop-center" r={r-edgeWidth/2} onPointerDown={e=>begin(e,'move',i)}><title>{s.name} · Drag to move or click for details</title></circle>
+      <circle className="stop-edge" r={r} style={{strokeWidth:edgeWidth}} onPointerDown={e=>begin(e,'size',i)}><title>Drag edge to resize stay</title></circle>
       {sel?.id===s.id&&(()=>{const cx=Math.cos(sel.angle),cy=Math.sin(sel.angle),x1=cx*(r-6),y1=cy*(r-6),x2=cx*(r+38),y2=cy*(r+38);return <g className="stop-handle" onPointerDown={e=>begin(e,'size',i)}>
         <line x1={x1} y1={y1} x2={x2} y2={y2} stroke="#22302a" strokeWidth="7.5" strokeLinecap="round"/><line x1={x1} y1={y1} x2={x2} y2={y2} stroke="#c99a62" strokeWidth="4" strokeLinecap="round"/>
         <line className="stop-handle-hit" x1={x1} y1={y1} x2={x2} y2={y2}/><circle cx={x2} cy={y2} r="10" fill="#ffc93c" stroke="#22302a" strokeWidth="2.8"><title>Drag to change days</title></circle></g>})()}
