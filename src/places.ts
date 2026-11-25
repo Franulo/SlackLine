@@ -6,6 +6,7 @@ export interface SuggestedPlace {
   importance: number
   sourceUrl: string
   popularity: string
+  kind: 'city' | 'attraction'
   pageId?: number
 }
 
@@ -87,6 +88,7 @@ export async function searchPlaces(query: string, signal?: AbortSignal): Promise
     const data: { results?: GeocodedPlace[] } = await response.json()
     return (data.results ?? []).map(place => ({
       name: place.name,
+      kind: 'city',
       lng: place.longitude,
       lat: place.latitude,
       description: [place.admin1, place.country].filter(Boolean).join(', '),
@@ -99,8 +101,37 @@ export async function searchPlaces(query: string, signal?: AbortSignal): Promise
 
 const wrapLongitude = (lng: number) => ((lng + 180) % 360 + 360) % 360 - 180
 const radians = Math.PI / 180
-const isDestination = /\b(city|cities|town(ship)?|village|settlement|capital|municipality|suburb|neighbou?rhood|parish|borough|museum|gallery|library|cathedral|church|mosque|synagogue|temple|shrine|monastery|abbey|palace|castle|fort(ress)?|tower|plaza|square|market|gardens?|parks?|reserve|heritage|landmark|monument|memorial|bridge|beach|island|lake|waterfall|mountain|volcano|archaeological|historic site|stadium|theat(er|re)|university|aquarium|zoo)\b/i
+const settlement = /\b(city|cities|town(ship)?|village|settlement|capital|municipality|suburb|neighbou?rhood|parish|borough)\b/i
+const attraction = /\b(city hall|city park|town hall|museum|gallery|library|cathedral|church|mosque|synagogue|temple|shrine|monastery|abbey|palace|castle|fort(ress)?|tower|plaza|square|market|gardens?|parks?|reserve|heritage|landmark|monument|memorial|bridge|beach|island|lake|waterfall|mountain|volcano|archaeological|historic site|stadium|theat(er|re)|university|aquarium|zoo)\b/i
 const isEvent = /\b(battle|massacre|earthquake|treaty|disaster|election|attack|bombing|siege|football club|political party|tournament|competition|airline|company|former country)\b/i
+function destinationKind(description: string): SuggestedPlace['kind'] | undefined {
+  const city = description.match(settlement)?.index ?? Infinity
+  const site = description.match(attraction)?.index ?? Infinity
+  if (city === Infinity && site === Infinity) return undefined
+  return city < site ? 'city' : 'attraction'
+}
+
+async function searchWikipedia(query: string, limit: number, signal?: AbortSignal, sort = 'relevance'): Promise<WikiPage[]> {
+  const params = new URLSearchParams({
+    action: 'query', format: 'json', formatversion: '2', origin: '*', generator: 'search',
+    gsrnamespace: '0', gsrsearch: query, gsrsort: sort, gsrlimit: String(limit),
+    prop: 'coordinates|description', colimit: String(limit),
+  })
+  const response = await fetch('https://en.wikipedia.org/w/api.php?' + params, {
+    signal, headers: { 'Api-User-Agent': 'SlackLine/0.1 (UPenn HCI trip planner)' },
+  })
+  if (!response.ok) throw new Error('Wikipedia places are temporarily unavailable.')
+  const data: { error?: unknown; query?: { pages?: WikiPage[] } } = await response.json()
+  if (data.error) throw new Error('Wikipedia places are temporarily unavailable.')
+  return (data.query?.pages ?? []).sort((a, b) => a.index - b.index)
+}
+
+export async function findCityArticle(place: SuggestedPlace, signal: AbortSignal) {
+  const title = place.name.replaceAll('"', '')
+  const near = `nearcoord:30km,${place.lat.toFixed(4)},${wrapLongitude(place.lng).toFixed(4)}`
+  const pages = await searchWikipedia(`intitle:"${title}" ${near}`, 10, signal)
+  return pages.find(page => page.description && !isEvent.test(page.description) && destinationKind(page.description) === 'city')
+}
 
 export async function suggestPlaces(bounds: PlaceBounds, signal?: AbortSignal): Promise<SuggestedPlace[]> {
   const width = bounds.east >= bounds.west ? bounds.east - bounds.west : (bounds.east - bounds.west + 360) % 360
@@ -122,31 +153,24 @@ export async function suggestPlaces(bounds: PlaceBounds, signal?: AbortSignal): 
   const area = radius + 'km,' + queryLat + ',' + queryLng
 
   const places = await getPlaces('wiki/' + area, signal, async () => {
-    const params = new URLSearchParams({
-      action: 'query', format: 'json', formatversion: '2', origin: '*', generator: 'search',
-      gsrnamespace: '0', gsrsearch: 'nearcoord:' + area, gsrsort: 'incoming_links_desc', gsrlimit: '50',
-      prop: 'coordinates|description', colimit: '50',
-    })
-    const response = await fetch('https://en.wikipedia.org/w/api.php?' + params, {
-      signal, headers: { 'Api-User-Agent': 'SlackLine/0.1 (UPenn HCI trip planner)' },
-    })
-    if (!response.ok) throw new Error('Nearby suggestions are temporarily unavailable.')
-    const data: { error?: unknown; query?: { pages?: WikiPage[] } } = await response.json()
-    if (data.error) throw new Error('Nearby suggestions are temporarily unavailable.')
-    return (data.query?.pages ?? []).flatMap(page => {
+    const pages = await searchWikipedia('nearcoord:' + area, 50, signal, 'incoming_links_desc')
+    return pages.flatMap(page => {
       const coord = page.coordinates?.[0]
-      if (!coord || !page.description || !isDestination.test(page.description) || isEvent.test(page.description)) return []
+      const description = page.description
+      const kind = description && destinationKind(description)
+      if (!coord || !description || !kind || isEvent.test(description)) return []
       return [{
         name: page.title,
         lat: coord.lat,
         lng: coord.lon,
-        description: page.description,
+        description,
+        kind,
         importance: 1 / page.index,
         popularity: '#' + page.index + ' nearby by Wikipedia incoming links',
         sourceUrl: 'https://en.wikipedia.org/?curid=' + page.pageid,
         pageId: page.pageid,
       }]
-    }).sort((a, b) => b.importance - a.importance)
+    })
   })
 
   return places.filter(place =>

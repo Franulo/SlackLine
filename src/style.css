@@ -10,13 +10,38 @@ h1,h2{font-family:Fraunces,Georgia,serif}button:focus-visible,a:focus-visible,in
 .place-pin{cursor:pointer}
 .place-pin-hit{fill:transparent;pointer-events:all}
 .place-pin-dot{fill:#2f8f6b;stroke:#fffdf7;stroke-width:1.5}
+.place-pin[data-kind=city] .place-pin-dot{fill:#ffc93c;stroke:#22302a}
 .place-pin text{opacity:0;font-size:12px}
 .place-pin:hover text,.place-pin:focus-visible text,.place-pin[aria-expanded=true] text{opacity:1}
-.place-pin:hover .place-pin-dot,.place-pin:focus-visible .place-pin-dot,.place-pin[aria-expanded=true] .place-pin-dot{fill:#ffc93c;stroke:#22302a}
+.place-pin:hover .place-pin-dot,.place-pin:focus-visible .place-pin-dot,.place-pin[aria-expanded=true] .place-pin-dot{stroke:#22302a;stroke-width:2.5}
 .map-tag{pointer-events:all;cursor:pointer}.map-tag rect{fill:#fff4da;stroke:#22302a;stroke-width:2}.map-tag text{font:700 12px Figtree;fill:#22302a}
 .panel,.trip-list>button{background:#fffdf7;border:2px solid #22302a;border-radius:15px;box-shadow:4px 4px #22302a}.panel{padding:20px}
 .panel button,.date-controls>button,.library header button{background:white;border:1.7px solid #22302a;border-radius:8px;padding:7px 11px;font-weight:650}
-.editor{position:absolute;left:20px;top:28%;width:min(310px,90vw);z-index:9}.editor h2{margin:8px 0}.dismiss{float:right}
+.editor{
+  --fit-width:min(var(--postcard-width, 330px),calc(100% - 16px));
+  --fit-height:min(var(--postcard-height, 380px),calc(100% - 16px));
+  position:absolute;
+  left:clamp(8px,var(--postcard-left, 20px),calc(100% - var(--fit-width) - 8px));
+  top:clamp(8px,var(--postcard-top, 28%),calc(100% - var(--fit-height) - 8px));
+  width:var(--fit-width);
+  height:var(--fit-height);
+  z-index:9;
+  display:flex;
+  flex-direction:column;
+  padding:0;
+}
+.editor-header{display:flex;align-items:flex-start;gap:8px;padding:12px 14px;border-bottom:1px solid #e4ddce;cursor:grab;touch-action:none;user-select:none}
+.editor-header:active{cursor:grabbing}
+.editor-header>div{flex:1;min-width:0}
+.editor h2{margin:4px 0 0;font-size:clamp(17px,3vw,22px);overflow-wrap:anywhere;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
+.editor-header button,.editor-footer button{display:grid;place-items:center;flex:none;width:30px;height:30px;padding:0}
+.editor-header button svg{width:14px;height:14px}
+.editor-title:focus-visible{outline:2px solid #bc7c00;outline-offset:3px}
+.editor-body{display:flex;flex-direction:column;flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;padding:0 14px}
+.editor-body p{margin:10px 0 0}
+.editor-body>button{align-self:flex-start;margin:8px 0}
+.editor-footer{display:flex;justify-content:flex-end;padding:4px}
+.editor .editor-resize{cursor:nwse-resize;touch-action:none}
 .place-card{display:flex;flex-direction:column;width:min(280px,100%);min-height:0;max-height:100%;padding:0;overflow:hidden;pointer-events:auto}
 .place-card-header{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;padding:10px 12px;border-bottom:1px solid #e4ddce}
 .place-card h2{font-size:21px;margin:0;overflow-wrap:anywhere}
@@ -35,7 +60,13 @@ h1,h2{font-family:Fraunces,Georgia,serif}button:focus-visible,a:focus-visible,in
 .place-guide blockquote p{margin:2px 0}
 .place-photo{display:block}
 .place-photo img{display:block;width:100%;height:112px;object-fit:cover;border-radius:8px}
-.panel label{display:block;margin:12px 0 4px;font-weight:650}.editor input,.editor textarea,.date-controls input[type=date]{display:block;width:100%;padding:8px;border:1px solid #7a7466;border-radius:7px;background:white}.editor textarea{margin-top:4px;min-height:78px;resize:vertical}
+.panel label{display:block;margin:12px 0 4px;font-weight:650}.editor input,.editor textarea,.date-controls input[type=date]{display:block;width:100%;padding:8px;border:1px solid #7a7466;border-radius:7px;background:white}
+.editor .editor-notes{display:flex;flex:1 0 auto;flex-direction:column;margin:12px 0 4px}
+.editor textarea{flex:1;margin-top:4px;min-height:78px;resize:none}
+.editor-notes-heading{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.editor-notes-heading button{padding:2px 5px;border:0;background:transparent;text-decoration:underline;color:#245e4b}
+.editor-note-text{flex:1;min-height:78px;margin-top:4px;padding:8px;border:1px solid #7a7466;border-radius:7px;background:white;white-space:pre-wrap;overflow-wrap:anywhere}
+.editor-note-text a{color:#245e4b;text-decoration:underline}
 .date-controls{position:absolute;bottom:34px;left:64px;z-index:4}.date-controls .panel{position:absolute;bottom:45px;left:0;width:260px}.date-list{max-height:35vh;overflow:auto;padding-left:20px}.date-list small,.trip-list small{display:block}
 .map-message{position:fixed;bottom:40px;left:50%;transform:translateX(-50%);z-index:12;border-radius:12px;color:white;padding:10px 18px;background:#22302a}
 .library,.course{min-height:100vh;padding:clamp(20px,4vw,60px);background:#e3ece9}.library header{display:flex;align-items:center;justify-content:space-between}.library header button{background:#ffc93c;box-shadow:3px 3px #22302a;padding:10px 18px}.library section,.course>*{max-width:850px;margin-inline:auto}.library h1,.course h1{font-size:clamp(42px,6vw,70px)}.trip-list{display:grid;gap:15px}.trip-list button{display:flex;text-align:left;align-items:center;gap:18px;padding:18px}.trip-list strong{font:700 24px Fraunces}.trip-list b{margin-left:auto}.swatches,.icons{display:flex;gap:16px;align-items:center}.swatches>div{min-width:80px}.course nav{margin-block:32px}

@@ -6,24 +6,30 @@ export type Trip = {
   stops: Stop[]; legs: Leg[]; startDate: string; absolute: boolean
 }
 const newLeg = (): Leg => ({id: crypto.randomUUID(), days: 0, note: ''})
-const newStop = (place: Place): Stop => ({...place, id: crypto.randomUUID(), days: 1, note: ''})
+const newStop = (place: Place, days: number): Stop => ({...place, id: crypto.randomUUID(), days, note: ''})
 
 export function createTrip(name: string, total: number, mode: Trip['mode'], from: Place, to: Place, startDate: string): Trip {
-  const stops = (mode === 'loop' ? [to] : [from, to]).map(newStop)
+  const budget = stayBudget(total)
+  const stops = (mode === 'loop' ? [to] : [from, to]).map((place, index) => newStop(place, index < budget ? 1 : 0))
   return {id: crypto.randomUUID(), name, total, mode, stops, legs: [newLeg()], startDate, absolute: false}
 }
+export function stayBudget(days: number) {
+  return Math.max(0, days - 1)
+}
 export function remaining(trip: Trip) {
-  return trip.total - [...trip.stops, ...trip.legs].reduce((sum, item) => sum + item.days, 0)
+  return stayBudget(trip.total) - [...trip.stops, ...trip.legs].reduce((sum, item) => sum + item.days, 0)
 }
 export function allocate(trip: Trip, kind: 'stops' | 'legs', index: number, days: number): Trip {
   const item = trip[kind][index]
   if (!item || !Number.isFinite(days)) return trip
-  const value = Math.max(kind === 'stops' ? 1 : 0, Math.min(Math.round(days), item.days + remaining(trip)))
+  const value = Math.max(0, Math.min(Math.round(days), item.days + Math.max(0, remaining(trip))))
+  if (value === item.days) return trip
   return {...trip, [kind]: trip[kind].map((entry, i) => i === index ? {...entry, days: value} : entry)}
 }
 export function insert(trip: Trip, index: number, place: Place): Trip {
-  if (remaining(trip) < 1 || !trip.legs[index]) return trip
-  return {...trip, stops: trip.stops.toSpliced(index + 1, 0, newStop(place)), legs: trip.legs.toSpliced(index + 1, 0, newLeg())}
+  if (!trip.legs[index]) return trip
+  const stop = newStop(place, remaining(trip) > 0 ? 1 : 0)
+  return {...trip, stops: trip.stops.toSpliced(index + 1, 0, stop), legs: trip.legs.toSpliced(index + 1, 0, newLeg())}
 }
 export function removeStop(trip: Trip, index: number): Trip {
   if (index <= 0 || index >= trip.legs.length) return trip
@@ -39,13 +45,13 @@ export function distance(a: Place, b: Place) {
 export function rangeLabel(trip: Trip, index: number, travel = false) {
   const offset = trip.stops.slice(0,index).reduce((n,s,i)=>n+s.days+trip.legs[i].days,0) + (travel ? trip.stops[index].days : 0)
   const count = travel ? trip.legs[index].days : trip.stops[index].days
-  if (!count) return 'Same-day travel'
+  if (travel && !count) return 'Same-day travel'
   const label = (n: number) => {
     if (!trip.absolute || !trip.startDate) return String(n+1)
     const d = new Date(trip.startDate+'T12:00:00Z')
     d.setUTCDate(d.getUTCDate()+n)
     return d.toLocaleDateString('en-US',{month:'short',day:'numeric',timeZone:'UTC'})
   }
-  const prefix = trip.absolute && trip.startDate ? '' : 'Day '
-  return prefix+label(offset)+(count>1?'–'+label(offset+count-1):'')
+  const prefix = trip.absolute && trip.startDate ? '' : count === 0 ? 'Day ' : 'Days '
+  return prefix+label(offset)+(count>0?'–'+label(offset+count):'')
 }

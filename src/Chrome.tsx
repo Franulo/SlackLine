@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Brand, YarnBall } from './art';
+import { stayBudget } from './model';
 import './chrome.css';
 
 type ChromeProps = {
@@ -56,29 +57,31 @@ function TripName({name, onName}: Pick<ChromeProps, 'name' | 'onName'>) {
 }
 
 function Budget({total, remaining, onTotal}: Pick<ChromeProps, 'total' | 'remaining' | 'onTotal'>) {
-  const used = total - remaining;
+  const budget = stayBudget(total);
+  const used = budget - remaining;
+  const available = Math.max(0, remaining);
   const full = remaining === 0;
-  return <section className={'sl-budget' + (full ? ' sl-budget-full' : '')} aria-label="Day budget">
-    <div className="sl-budget-label"><strong>Day budget</strong><span>Trip length</span></div>
+  return <section className={'sl-budget' + (full ? ' sl-budget-full' : '')} aria-label="Stay budget">
+    <div className="sl-budget-label"><strong>Stay budget</strong><span>Trip length</span></div>
     <div className="sl-budget-stepper">
-      <button type="button" aria-label="Remove a day from the trip" disabled={total <= 2 || full} onClick={() => onTotal(total - 1)}>−</button>
-      <span><b>{total}</b> days</span>
+      <button type="button" aria-label="Remove a day from the trip" disabled={total <= 1 || remaining <= 0} onClick={() => onTotal(total - 1)}>−</button>
+      <span><b>{total}</b> {total === 1 ? 'day' : 'days'}</span>
       <button type="button" aria-label="Add a day to the trip" disabled={total >= 90} onClick={() => onTotal(total + 1)}>+</button>
     </div>
     <div className="sl-budget-count" role="status" aria-live="polite" aria-atomic="true">
-      <strong>{remaining}</strong>
-      <div><b>{remaining === 1 ? 'day left' : 'days left'}</b><small>{used} of {total} planned</small></div>
+      <strong>{available}</strong>
+      <div><b>{available === 1 ? 'stay left' : 'stays left'}</b><small>{remaining < 0 ? `${-remaining} over budget` : `${used} of ${budget} planned`}</small></div>
       <div className="sl-budget-ball" aria-hidden="true">
         {full ? <svg width="52" height="52" viewBox="-26 -26 52 52"><g stroke="#22302A" strokeWidth="2.2"><rect x="-11" y="-15" width="22" height="30" fill="#F3E3C3"/><path d="M-11 -6h22m-22 8h22" stroke="#2F8F6B"/><rect x="-17" y="-22" width="34" height="7" rx="2" fill="#E6CFA4"/><rect x="-17" y="15" width="34" height="7" rx="2" fill="#E6CFA4"/></g></svg> :
-          <YarnBall width={27 + 42 * remaining / total} height={27 + 42 * remaining / total}/>}
+          <YarnBall width={27 + 42 * available / Math.max(1, budget)} height={27 + 42 * available / Math.max(1, budget)}/>}
       </div>
     </div>
     <svg className="sl-budget-bar" viewBox="0 0 270 16" preserveAspectRatio="none" aria-hidden="true">
       <rect x="1" y="2" width="268" height="12" rx="6" fill="#F1EDE4" stroke="currentColor" strokeWidth="1.6"/>
-      <rect x="1" y="2" width={Math.max(8, 268 * used / total)} height="12" rx="6" fill={full ? '#2F8F6B' : '#E4572E'} stroke="currentColor" strokeWidth="1.6"/>
-      {total <= 45 && Array.from({length: total - 1}, (_, i) => <path key={i} d={'M' + (1 + 268 * (i+1) / total) + ' 5v6'} stroke="currentColor" opacity=".25"/>)}
+      {used > 0 && budget > 0 && <rect x="1" y="2" width={Math.max(8, 268 * Math.min(used / budget, 1))} height="12" rx="6" fill={full ? '#2F8F6B' : '#E4572E'} stroke="currentColor" strokeWidth="1.6"/>}
+      {budget > 1 && budget <= 45 && Array.from({length: budget - 1}, (_, i) => <path key={i} d={'M' + (1 + 268 * (i+1) / budget) + ' 5v6'} stroke="currentColor" opacity=".25"/>)}
     </svg>
-    <p>{full ? 'Every day is planned' : remaining <= 4 ? 'Only ' + remaining + (remaining === 1 ? ' day' : ' days') + ' of yarn left' : 'Each ball’s size is days of stay'}</p>
+    <p>{remaining < 0 ? 'Add a day or reduce an overnight stay.' : budget === 0 ? 'A day trip has zero overnight stays' : full ? 'Every stay is planned' : 'Ball size shows the number of stays'}</p>
   </section>;
 }
 
@@ -100,7 +103,7 @@ export function Chrome(props: ChromeProps) {
     {tipsOpen && !props.placeCard ? <aside className="sl-chrome-tips">
       <button className="sl-tips-close" type="button" aria-label="Close tips" onClick={() => setTipsOpen(false)}><CloseIcon/></button>
       <h2>Try it</h2>
-      <ol><li>Pull the yarn onto the map to add a stop.</li><li>Drag a ball to move it, or drag its edge to change stay days.</li><li>Click a strand to plan travel days or write a note.</li></ol>
+      <ol><li>Pull the yarn onto the map to add a stop.</li><li>Drag a ball to move it, or drag its edge to change the number of stays.</li><li>Click a strand to plan overnight travel or write a note.</li></ol>
     </aside> : <button type="button" className="sl-chrome-help" aria-label="Show tips" onClick={() => {props.onShowTips();setTipsOpen(true);}}>?</button>}
   </div>;
 }

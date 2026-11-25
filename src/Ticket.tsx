@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import type { Place } from './model'
+import { stayBudget } from './model'
 import { searchPlaces } from './places'
 import { cities, filterCities } from './cities'
 import { Brand, Cat, YarnBall } from './art'
@@ -105,14 +106,14 @@ export function Ticket({onCreate, onTrips}: TicketProps) {
         </div>
         <div className="ticket-mode" role="group" aria-label="Route type">{(['open','loop'] as const).map(m => <button type="button" key={m} aria-pressed={mode === m} onClick={() => setMode(m)}>{m === 'loop' ? 'One destination' : 'Start & end'}</button>)}</div>
         <div className="ticket-fields"><label>Trip name<input value={name} maxLength={80} required onChange={e => setName(e.target.value)}/></label>
-          <div><span>Trip length</span><div className="ticket-step"><button type="button" aria-label="Fewer days" disabled={days <= 2} onClick={() => setDays(days-1)}>−</button><div><YarnBall width="32" height="32"/><strong>{days}</strong> days</div><button type="button" aria-label="More days" disabled={days >= 90} onClick={() => setDays(days+1)}>+</button></div></div>
+          <div><span>Trip length</span><div className="ticket-step"><button type="button" aria-label="Fewer days" disabled={days <= 1} onClick={() => setDays(days-1)}>−</button><div><YarnBall width="32" height="32"/><strong>{days}</strong> {days === 1 ? 'day' : 'days'}</div><button type="button" aria-label="More days" disabled={days >= 90} onClick={() => setDays(days+1)}>+</button></div></div>
         </div>
         <label className="ticket-date">Start date <input aria-label="Start date" type="date" value={date} onChange={e => setDate(e.target.value)}/><small>Optional</small></label>
       </section>
       <aside className="ticket-stub">
         <div className="ticket-barcode" aria-hidden="true">{bars.map((w,i) => <i key={i} style={{width:w}}/>)}</div>
         <Cat className="ticket-mascot"/>
-        <div className="ticket-summary"><span>Ready to plan</span><strong>{days} days</strong><b>{mode === 'loop' ? code(to) + ' and beyond' : code(from) + ' → ' + code(to)}</b></div>
+        <div className="ticket-summary"><span>{stayBudget(days)} {stayBudget(days) === 1 ? 'stay' : 'stays'} available</span><strong>{days} {days === 1 ? 'day' : 'days'}</strong><b>{mode === 'loop' ? code(to) + ' and beyond' : code(from) + ' → ' + code(to)}</b></div>
         {duplicate && <p role="alert">Pick two different places.</p>}
         <button className="ticket-go" disabled={duplicate || !name.trim()}>Start trip <span aria-hidden="true">→</span></button>
       </aside>

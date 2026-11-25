@@ -1,15 +1,15 @@
-import {useEffect,useRef,useState} from 'react'
+import {useEffect,useLayoutEffect,useMemo,useRef,useState} from 'react'
 import type {PointerEvent as ReactPointer} from 'react'
-import {flushSync} from 'react-dom'
 import maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
-import {allocate,distance,insert,remaining} from './model'
+import {allocate,distance,insert,remaining,stayBudget} from './model'
 import type {Trip,Place} from './model'
-import {loadPlacePreview,suggestPlaces} from './places'
+import {findCityArticle,loadPlacePreview,suggestPlaces} from './places'
 import type {SuggestedPlace} from './places'
 import {CloseIcon} from './Chrome'
 import {loadTravelGuide} from './travelGuide'
 import {YarnBall,Cat} from './art'
+import {cities} from './cities'
 
 type Point = {x:number;y:number}
 type Drag = {kind:'pull'|'move'|'size';index:number;origin:Point;base:Trip;draft:Trip;started:boolean;radius:number}
@@ -18,6 +18,18 @@ type Props = {trip:Trip; notes:boolean; commit:(trip:Trip)=>void; preview:(trip:
 const radius = (days:number)=>15+3.8*Math.sqrt(days)*Math.sqrt(Math.min(6,days))
 const ballScale = (zoom:number)=>Math.max(.28,Math.min(1,2**((zoom-7)/2.5)))
 const nearbyLongitude = (lng:number,reference:number)=>lng+360*Math.round((reference-lng)/360)
+const localPlaces:SuggestedPlace[]=cities.map(({name,description,lng,lat})=>({
+  name,description,lng,lat,kind:'city',importance:0,popularity:'',
+  sourceUrl:'https://en.wikipedia.org/w/index.php?search='+encodeURIComponent(name+' '+description),
+}))
+const translate = (p:Point)=>`translate(${p.x},${p.y})`
+function projectStops(engine:maplibregl.Map,trip:Trip,centerLng=engine.getCenter().lng){
+  let routeLng=centerLng
+  return trip.stops.map(s=>{
+    routeLng=nearbyLongitude(s.lng,routeLng)
+    return engine.project([routeLng,s.lat])
+  })
+}
 const km = (a:Place,b:Place)=>Math.round(distance(a,b)).toLocaleString()+' km'
 const mid = (a:Point,b:Point)=>({x:(a.x+b.x)/2,y:(a.y+b.y)/2})
 function curve(a:Point,b:Point,sag:number,loop:boolean,single:boolean) {
@@ -53,6 +65,58 @@ function paintMap(m:maplibregl.Map){
   }
   for(const id of clutter){try{if(m.getLayer(id))m.setLayoutProperty(id,'visibility','none')}catch{}}
 }
+function addCityDots(m:maplibregl.Map){
+  const layers=m.getStyle().layers.filter(layer=>layer.type==='symbol'&&
+    /(?:^|[-_])(city|town)(?:$|[-_])/i.test(layer.id)&&layer.layout?.['text-field'])
+  if(!layers.length)return []
+
+  const image='slackline-city-dot'
+  const canvas=document.createElement('canvas')
+  canvas.width=canvas.height=18
+  const ctx=canvas.getContext('2d')
+  if(!ctx)return []
+  ctx.beginPath()
+  ctx.arc(9,9,6.5,0,Math.PI*2)
+  ctx.fillStyle='#ffc93c'
+  ctx.fill()
+  ctx.lineWidth=2
+  ctx.strokeStyle='#22302a'
+  ctx.stroke()
+  m.addImage(image,ctx.getImageData(0,0,18,18),{pixelRatio:2})
+
+  return layers.map(({id})=>{
+    // The dot and name share a symbol and use the same zoom and collision rules.
+    m.setLayoutProperty(id,'icon-image',image)
+    m.setLayoutProperty(id,'icon-size',1)
+    m.setLayoutProperty(id,'icon-allow-overlap',true)
+    m.setLayoutProperty(id,'icon-optional',false)
+    m.setLayoutProperty(id,'text-optional',false)
+    m.setLayoutProperty(id,'text-anchor','bottom')
+    m.setLayoutProperty(id,'text-offset',[0,-.35])
+    return id
+  })
+}
+function cityNear(m:maplibregl.Map,layers:string[],point:Point,lngReference:number,reach:number){
+  if(!layers.length)return
+  const {x,y}=point
+  const features=m.queryRenderedFeatures([[x-reach,y-reach],[x+reach,y+reach]],{layers})
+  let closest:SuggestedPlace|undefined
+  for(const feature of features){
+    if(feature.geometry.type!=='Point')continue
+    const [lng,lat]=feature.geometry.coordinates
+    const p=m.project([nearbyLongitude(lng,lngReference),lat])
+    const distance=Math.hypot(x-p.x,y-p.y)
+    const name=feature.properties.name_en??feature.properties['name:en']??feature.properties.name
+    if(distance>=reach||typeof name!=='string'||!name)continue
+    reach=distance
+    closest={
+      name,lng,lat,kind:'city',importance:0,popularity:'',
+      description:feature.properties.class==='town'?'Town':'City',
+      sourceUrl:'https://en.wikipedia.org/w/index.php?search='+encodeURIComponent(name),
+    }
+  }
+  return closest
+}
 // Gentle sea shimmer: repaints only while the camera is still, slow, and on screen.
 function startShimmer(m:maplibregl.Map,busy:()=>boolean){
   const calm=matchMedia('(prefers-reduced-motion: reduce)').matches||new URLSearchParams(location.search).has('nofx')
@@ -69,6 +133,7 @@ function startShimmer(m:maplibregl.Map,busy:()=>boolean){
 export function PlaceCard({place,close}:{place:SuggestedPlace;close:()=>void}){
   const [preview,setPreview]=useState<Awaited<ReturnType<typeof loadPlacePreview>>>()
   const [guide,setGuide]=useState<Awaited<ReturnType<typeof loadTravelGuide>>>()
+  const [articleId,setArticleId]=useState(place.pageId)
   const [imageFailed,setImageFailed]=useState(false)
   const closeButton=useRef<HTMLButtonElement>(null)
   const opener=useRef<Element|null>(null)
@@ -81,18 +146,26 @@ export function PlaceCard({place,close}:{place:SuggestedPlace;close:()=>void}){
     if(opener.current instanceof SVGElement)opener.current.focus({preventScroll:true})
   }
   useEffect(()=>{
-    if(place.pageId===undefined)return
     const controller=new AbortController()
     const timeout=setTimeout(()=>controller.abort(),8000)
     const {signal}=controller
-    loadPlacePreview(place.pageId,signal).then(data=>{
-      if(!signal.aborted)setPreview(data)
-    }).catch(()=>{/* The short description is available immediately. */})
-    loadTravelGuide(place.name,signal).then(data=>{
-      if(!signal.aborted)setGuide(data)
-    }).catch(()=>{/* The Wikipedia preview remains available independently. */})
+    async function loadDetails(){
+      const article=place.pageId===undefined&&place.kind==='city'
+        ? await findCityArticle(place,signal).catch(()=>undefined)
+        : undefined
+      if(signal.aborted)return
+      const id=place.pageId??article?.pageid
+      setArticleId(id)
+      if(id!==undefined)loadPlacePreview(id,signal).then(data=>{
+        if(!signal.aborted)setPreview(data)
+      }).catch(()=>{/* The short description is available immediately. */})
+      if(id!==undefined||place.kind==='city')loadTravelGuide(article?.title??place.name,signal).then(data=>{
+        if(!signal.aborted)setGuide(data)
+      }).catch(()=>{/* The Wikipedia preview remains available independently. */})
+    }
+    void loadDetails()
     return ()=>{clearTimeout(timeout);controller.abort()}
-  },[place.name,place.pageId])
+  },[place])
   return <aside className="place-card panel" aria-label={place.name} onKeyDown={e=>{
     if(e.key==='Escape'){e.stopPropagation();dismiss()}
   }}>
@@ -118,8 +191,8 @@ export function PlaceCard({place,close}:{place:SuggestedPlace;close:()=>void}){
           <img src={preview.thumbnail.source} alt={place.name} onError={()=>setImageFailed(true)}/>
         </a>}
       {preview?.extract?.trim()&&<p>{preview.extract.trim()}</p>}
-      <small>{place.popularity}</small>
-      <a href={place.sourceUrl} target="_blank" rel="noreferrer">Read on Wikipedia ↗</a>
+      {place.popularity&&<small>{place.popularity}</small>}
+      <a href={articleId===undefined?place.sourceUrl:'https://en.wikipedia.org/?curid='+articleId} target="_blank" rel="noreferrer">Read on Wikipedia ↗</a>
     </div>
   </aside>
 }
@@ -127,6 +200,9 @@ export function RouteMap(props:Props){
   const host=useRef<HTMLDivElement>(null), svg=useRef<SVGSVGElement>(null), map=useRef<maplibregl.Map|null>(null)
   const current=useRef(props); current.current=props
   const drag=useRef<Drag|null>(null), clouds=useRef<HTMLDivElement>(null)
+  const syncOverlay=useRef<()=>void>(()=>{})
+  const visiblePlaces=useRef<{place:SuggestedPlace;point:Point}[]>([])
+  const cityLayers=useRef<string[]>([])
   const [,redraw]=useState(0), [message,setMessage]=useState(''), [hint,setHint]=useState('')
   const [places,setPlaces]=useState<Awaited<ReturnType<typeof suggestPlaces>>>([])
   const {placeCard,selectPlace}=props
@@ -150,17 +226,21 @@ export function RouteMap(props:Props){
     engine.on('render',()=>{
       if(!cameraDirty)return
       cameraDirty=false
-      // Apply the SVG positions in the same frame as the map camera.
-      flushSync(()=>redraw(v=>v+1))
-      if(clouds.current)clouds.current.style.opacity=engine.getZoom()>11?'0':''
+      syncOverlay.current()
+      if(clouds.current){
+        const opacity=engine.getZoom()>11?'0':''
+        if(clouds.current.style.opacity!==opacity)clouds.current.style.opacity=opacity
+      }
     })
     engine.on('moveend',()=>{if(import.meta.env.DEV)(window as any).__moveend=performance.now();setCamera(v=>v+1)})
+    engine.on('style.load',()=>{cityLayers.current=addCityDots(engine)})
     engine.on('load',()=>{if(!import.meta.env.VITE_MAPTILER_KEY){paintMap(engine);shimmer=startShimmer(engine,()=>!!drag.current)};setMessage('');setCamera(v=>v+1)})
     engine.on('error',()=>{if(!engine.isStyleLoaded())setMessage('Map tiles are unavailable. Check your connection.')})
     engine.on('click',e=>{
-      const {trip,commit}=current.current
+      const {trip,commit,selectPlace}=current.current
+      const city=cityNear(engine,cityLayers.current,e.point,e.lngLat.lng,9)
+      if(city){selectPlace(city);return}
       const place={name:'Map stop',lng:e.lngLat.wrap().lng,lat:e.lngLat.lat}
-      if(remaining(trip)<=0){setMessage('Trip is full. Shorten a stay or add a day.');return}
       const paths=Array.from(svg.current?.querySelectorAll<SVGPathElement>('path[data-leg]')??[])
       let nearest=0,best=Infinity
       paths.forEach((path,index)=>{
@@ -169,8 +249,8 @@ export function RouteMap(props:Props){
       })
       commit(insert(trip,nearest,place))
     })
-    redraw(v=>v+1);setCamera(v=>v+1)
-    return ()=>{clearInterval(shimmer);map.current=null;engine.remove()}
+    syncOverlay.current();setCamera(v=>v+1)
+    return ()=>{clearInterval(shimmer);cityLayers.current=[];map.current=null;engine.remove()}
   },[])
   useEffect(()=>{
     if(!map.current)return
@@ -182,28 +262,82 @@ export function RouteMap(props:Props){
       try{const result=await suggestPlaces({west:b.getWest(),east:b.getEast(),north:b.getNorth(),south:b.getSouth()},controller.signal)
         if(!controller.signal.aborted){setPlaces(result);if(import.meta.env.DEV)requestAnimationFrame(()=>{(window as any).__placesAt=performance.now()})}
       }catch{if(!controller.signal.aborted)setPlaces([])}
-    },250)
+    },80)
     const cancel=()=>{clearTimeout(timer);controller.abort()}
     engine.on('movestart',cancel)
     return ()=>{engine.off('movestart',cancel);cancel()}
   },[camera])
   useEffect(()=>{if(message){const t=setTimeout(()=>setMessage(''),6000);return ()=>clearTimeout(t)}},[message])
-  const engine=map.current, trip=drag.current?.draft??props.trip
-  const centerLng=engine?.getCenter().lng??0
-  let routeLng=centerLng
-  const points=engine?trip.stops.map(s=>{
-    routeLng=nearbyLongitude(s.lng,routeLng)
-    return engine.project([routeLng,s.lat])
-  }):[]
-  const scale=ballScale(engine?.getZoom()??7)
-  const slack=remaining(trip), ratio=slack/trip.total
-  const legs=points.length?trip.legs.map((_,i)=>curve(points[i],points[(i+1)%points.length],ratio,trip.mode==='loop',points.length===1)):[]
+  const trip=drag.current?.draft??props.trip
+  const slack=Math.max(0,remaining(trip)), ratio=slack/Math.max(1,stayBudget(trip.total))
+  const candidates=useMemo(()=>[...places,...localPlaces],[places])
+  useLayoutEffect(()=>{
+    const overlay=svg.current!
+    const pins=Array.from(overlay.querySelectorAll<SVGGElement>('.place-pin'))
+    const legs=Array.from(overlay.querySelectorAll<SVGGElement>('[data-route-leg]')).map(leg=>({
+      paths:leg.querySelectorAll('path'),
+      tag:leg.querySelector('.map-tag'),
+    }))
+    const stops=Array.from(overlay.querySelectorAll<SVGGElement>('[data-route-stop]')).map(stop=>({
+      group:stop,
+      ball:stop.querySelector('[data-ball]')!,
+      label:stop.querySelector('.map-label')!,
+      tag:stop.querySelector('.map-tag'),
+      handle:stop.querySelector('.stop-handle'),
+    }))
+    const cat=overlay.querySelector('[data-route-cat]')
+    let lastScale:number|undefined
+    // The camera changes SVG geometry. React keeps ownership of the contents and handlers.
+    syncOverlay.current=()=>{
+      const engine=map.current
+      if(!engine)return
+      overlay.removeAttribute('visibility')
+      const {clientWidth:width,clientHeight:height}=engine.getContainer()
+      const centerLng=engine.getCenter().lng,zoom=engine.getZoom(),scale=ballScale(zoom)
+      const points=projectStops(engine,trip,centerLng)
+      const visible:typeof visiblePlaces.current=[]
+      pins.forEach((pin,i)=>{
+        const place=candidates[i]
+        const point=engine.project([nearbyLongitude(place.lng,centerLng),place.lat])
+        const show=visible.length<10&&point.x>=0&&point.x<=width&&point.y>=0&&point.y<=height&&
+          (place.pageId===undefined||zoom>=4)&&
+          visible.every(other=>Math.hypot(point.x-other.point.x,point.y-other.point.y)>=24)
+        if(show&&pin.hasAttribute('display'))pin.removeAttribute('display')
+        if(!show&&!pin.hasAttribute('display'))pin.setAttribute('display','none')
+        if(show){
+          pin.setAttribute('transform',translate(point))
+          visible.push({place,point})
+        }
+      })
+      visiblePlaces.current=visible
+      legs.forEach(({paths,tag},i)=>{
+        const {path,center}=curve(points[i],points[(i+1)%points.length],ratio,trip.mode==='loop',points.length===1)
+        paths.forEach(node=>node.setAttribute('d',path))
+        tag?.setAttribute('transform',translate({x:center.x,y:center.y+15}))
+        if(i===0)cat?.setAttribute('transform',translate({x:center.x-20,y:center.y-41}))
+      })
+      stops.forEach(({group,ball,label,tag,handle},i)=>{
+        group.setAttribute('transform',translate(points[i]))
+        if(scale===lastScale)return
+        const r=radius(trip.stops[i].days)
+        const offset=r*scale-r
+        ball.setAttribute('transform',`scale(${scale})`)
+        label.setAttribute('y',String(r*scale+18))
+        tag?.setAttribute('transform',translate({x:r*scale,y:-r*scale}))
+        if(handle&&sel)handle.setAttribute('transform',translate({x:Math.cos(sel.angle)*offset,y:Math.sin(sel.angle)*offset}))
+      })
+      lastScale=scale
+    }
+    syncOverlay.current()
+  },[trip,ratio,candidates,sel,props.notes])
   function point(e:ReactPointer){const box=svg.current!.getBoundingClientRect();return {x:e.clientX-box.left,y:e.clientY-box.top}}
   function begin(e:ReactPointer,kind:Drag['kind'],index:number){
     if(e.button!==0||drag.current)return
     e.preventDefault(); e.stopPropagation()
     const origin=point(e)
-    const p=points[index]
+    const engine=map.current
+    if(!engine)return
+    const p=projectStops(engine,trip)[index]
     drag.current={kind,index,origin,base:props.trip,draft:props.trip,started:false,radius:p?Math.hypot(origin.x-p.x,origin.y-p.y):0}
     svg.current!.setPointerCapture(e.pointerId)
     if(kind==='size'&&p)setSel({id:trip.stops[index].id,angle:Math.atan2(origin.y-p.y,origin.x-p.x)})
@@ -211,13 +345,13 @@ export function RouteMap(props:Props){
   }
   function move(e:ReactPointer){
     const d=drag.current
+    const engine=map.current
     if(!engine||!d)return
     const p=point(e), {base,index}=d
     if(!d.started && Math.hypot(p.x-d.origin.x,p.y-d.origin.y)<4)return
     d.started=true
-    if(d.kind==='pull'&&remaining(base)===0){setMessage('Trip is full. Shorten a stay or add a day.');return}
     if(d.kind==='size'){
-      const old=base.stops[index], center=points[index]
+      const old=base.stops[index], center=projectStops(engine,base)[index]
       const delta=Math.hypot(p.x-center.x,p.y-center.y)-d.radius
       d.draft=allocate(base,'stops',index,old.days+Math.round(delta/4))
       setSel({id:old.id,angle:Math.atan2(p.y-center.y,p.x-center.x)})
@@ -226,8 +360,9 @@ export function RouteMap(props:Props){
       const wrapped=ll.wrap()
       let place:Place={lng:wrapped.lng,lat:wrapped.lat,name:'Map stop'}
       let best=26
-      for(const item of places){const q=engine.project([nearbyLongitude(item.lng,ll.lng),item.lat]),dist=Math.hypot(q.x-p.x,q.y-p.y)
+      for(const {place:item,point:q} of visiblePlaces.current){const dist=Math.hypot(q.x-p.x,q.y-p.y)
         if(dist<best){place=item;best=dist}}
+      place=cityNear(engine,cityLayers.current,p,ll.lng,best)??place
       if(d.kind==='pull'){
         if(d.draft===base)d.draft=insert(base,index,place)
         d.draft={...d.draft,stops:d.draft.stops.map((s,i)=>i===index+1?{...s,...place}:s)}
@@ -252,11 +387,12 @@ export function RouteMap(props:Props){
     redraw(v=>v+1)
   }
   const c=slack?'#e4572e':'#2f8f6b'
-  return <><div className="basemap" ref={host}/>{!new URLSearchParams(location.search).has('nofx')&&<div className="clouds" ref={clouds} aria-hidden="true"><i/><i/></div>}<svg ref={svg} className="route-overlay" aria-label="Trip yarn and stops" onPointerMove={move} onPointerUp={()=>end(false)} onPointerCancel={()=>end(true)} onLostPointerCapture={()=>end(true)}>
-    {engine&&places.map(s=>{
-      const lng=nearbyLongitude(s.lng,centerLng)
-      const p=engine.project([lng,s.lat])
-      return <g className="place-pin" key={s.sourceUrl} transform={`translate(${p.x},${p.y})`}
+  return <><div className="basemap" ref={host}/>{!new URLSearchParams(location.search).has('nofx')&&<div className="clouds" ref={clouds} aria-hidden="true"><i/><i/></div>}<svg ref={svg} className="route-overlay" visibility="hidden" aria-label="Trip yarn and stops" onPointerMove={move} onPointerUp={e=>{
+    if(drag.current?.started&&drag.current.kind!=='size')move(e)
+    end(false)
+  }} onPointerCancel={()=>end(true)} onLostPointerCapture={()=>end(true)}>
+    {candidates.map(s=>
+      <g className="place-pin" data-kind={s.kind} key={s.sourceUrl}
         role="button" tabIndex={0} aria-label={s.name} aria-expanded={placeCard?.sourceUrl===s.sourceUrl}
         onClick={()=>selectPlace(s)} onKeyDown={e=>{
           if(e.key==='Enter'||e.key===' '){e.preventDefault();selectPlace(s)}
@@ -264,22 +400,24 @@ export function RouteMap(props:Props){
         }}>
         <title>{s.name}</title><circle className="place-pin-hit" r="11"/><circle className="place-pin-dot" r="4.5"/><text x="10" y="4">{s.name}</text>
       </g>
-    })}
-    {legs.map(({path,center},i)=><g key={trip.legs[i].id}>
-      <path d={path} stroke="#22302a" strokeWidth="8"/><path d={path} stroke={c} strokeWidth="5.5"/><path d={path} stroke="#ffd9bd" strokeWidth="1.8" strokeDasharray="5 5"/>
-      <path data-leg={i} className="grab-leg" d={path} onPointerDown={e=>begin(e,'pull',i)}/>
-      {props.notes&&<g className="map-tag" onClick={()=>props.select({kind:'legs',index:i})} transform={`translate(${center.x},${center.y+15})`}><rect x="-22" y="-10" width="44" height="22" rx="5"/><text textAnchor="middle" y="5">✉ {trip.legs[i].days}d</text></g>}
+    )}
+    {trip.legs.map((leg,i)=><g key={leg.id} data-route-leg>
+      <path stroke="#22302a" strokeWidth="8"/><path stroke={c} strokeWidth="5.5"/><path stroke="#ffd9bd" strokeWidth="1.8" strokeDasharray="5 5"/>
+      <path data-leg={i} className="grab-leg" onPointerDown={e=>begin(e,'pull',i)}/>
+      {props.notes&&<g className="map-tag" onClick={()=>props.select({kind:'legs',index:i})}><title>{leg.days} {leg.days===1?'night':'nights'} in transit</title><rect x="-22" y="-10" width="44" height="22" rx="5"/><text textAnchor="middle" y="5">✉ {leg.days}n</text></g>}
     </g>)}
-    {legs.length>0&&<Cat x={legs[0].center.x-20} y={legs[0].center.y-41} width="40" height="44" mood={slack?'wobbly':'celebrate'}/>}
-    {points.map((p,i)=>{const s=trip.stops[i],r=radius(s.days)*scale,edgeWidth=Math.min(9,r*.6);return <g key={s.id} transform={`translate(${p.x},${p.y})`}>
-      <YarnBall x={-r} y={-r} width={2*r} height={2*r} green={!slack}/>
-      <circle className="stop-center" r={r-edgeWidth/2} onPointerDown={e=>begin(e,'move',i)}><title>{s.name} · Drag to move or click for details</title></circle>
-      <circle className="stop-edge" r={r} style={{strokeWidth:edgeWidth}} onPointerDown={e=>begin(e,'size',i)}><title>Drag edge to resize stay</title></circle>
+    {trip.legs.length>0&&<g data-route-cat><Cat width="40" height="44" mood={slack?'wobbly':'celebrate'}/></g>}
+    {trip.stops.map((s,i)=>{const r=radius(s.days);return <g key={s.id} data-route-stop>
+      <g data-ball>
+        <YarnBall x={-r} y={-r} width={2*r} height={2*r} green={!slack}/>
+        <circle className="stop-center" r={r-4.5} onPointerDown={e=>begin(e,'move',i)}><title>{s.name} · Drag to move or click for details</title></circle>
+        <circle className="stop-edge" r={r} onPointerDown={e=>begin(e,'size',i)}><title>Drag edge to resize stay</title></circle>
+      </g>
       {sel?.id===s.id&&(()=>{const cx=Math.cos(sel.angle),cy=Math.sin(sel.angle),x1=cx*(r-6),y1=cy*(r-6),x2=cx*(r+38),y2=cy*(r+38);return <g className="stop-handle" onPointerDown={e=>begin(e,'size',i)}>
         <line x1={x1} y1={y1} x2={x2} y2={y2} stroke="#22302a" strokeWidth="7.5" strokeLinecap="round"/><line x1={x1} y1={y1} x2={x2} y2={y2} stroke="#c99a62" strokeWidth="4" strokeLinecap="round"/>
-        <line className="stop-handle-hit" x1={x1} y1={y1} x2={x2} y2={y2}/><circle cx={x2} cy={y2} r="10" fill="#ffc93c" stroke="#22302a" strokeWidth="2.8"><title>Drag to change days</title></circle></g>})()}
-      <text className="map-label" textAnchor="middle" y={r+18}>{s.name} · {s.days}d</text>
-      {props.notes&&<g className="map-tag" transform={`translate(${r},${-r})`} onClick={()=>props.select({kind:'stops',index:i})}><rect width="25" height="20" rx="4"/><text x="5" y="15">✉</text></g>}
+        <line className="stop-handle-hit" x1={x1} y1={y1} x2={x2} y2={y2}/><circle cx={x2} cy={y2} r="10" fill="#ffc93c" stroke="#22302a" strokeWidth="2.8"><title>Drag to change the number of stays</title></circle></g>})()}
+      <text className="map-label" textAnchor="middle">{s.name} · {s.days} {s.days===1?'stay':'stays'}</text>
+      {props.notes&&<g className="map-tag" onClick={()=>props.select({kind:'stops',index:i})}><rect width="25" height="20" rx="4"/><text x="5" y="15">✉</text></g>}
     </g>})}
   </svg>
   {(hint||message)&&<output className="map-message">{hint||message}</output>}</>
