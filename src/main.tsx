@@ -142,6 +142,70 @@ function Postcard({trip,selection,close,save}:{trip:Trip;selection:Selection;clo
     </footer>
   </section>
 }
+function TripList({trips,open,remove,reorder}:{trips:Trip[];open:(trip:Trip)=>void;remove:(trip:Trip)=>void;reorder:(id:string,to:number)=>void}){
+  const list=useRef<HTMLDivElement>(null)
+  const drag=useRef<{pointerId:number;id:string;from:number;to:number;grabY:number;rows:HTMLElement[]}|null>(null)
+  function start(e:PointerEvent<HTMLButtonElement>,id:string,from:number){
+    if(e.button!==0||drag.current||trips.length<2)return
+    const rows=Array.from(list.current!.querySelectorAll<HTMLElement>('.trip-row'))
+    drag.current={pointerId:e.pointerId,id,from,to:from,grabY:e.clientY-rows[from].getBoundingClientRect().top,rows}
+    rows[from].setAttribute('data-dragging','')
+    e.currentTarget.setPointerCapture(e.pointerId)
+  }
+  function track(e:PointerEvent<HTMLDivElement>){
+    const active=drag.current
+    if(active?.pointerId!==e.pointerId)return
+    const {rows,from,grabY}=active
+    const row=rows[from], container=list.current!
+    const max=container.clientHeight-row.offsetHeight
+    const top=Math.max(0,Math.min(max,e.clientY-container.getBoundingClientRect().top-grabY))
+    const center=top+row.offsetHeight/2
+    const before=rows.findIndex((other,i)=>i!==from&&center<other.offsetTop+other.offsetHeight/2)
+    const to=top===0?0:top===max?rows.length-1:before===-1?rows.length-1:before>from?before-1:before
+    const gap=rows[1].offsetTop-rows[0].offsetTop-rows[0].offsetHeight
+    const shift=row.offsetHeight+gap
+    rows.forEach((other,i)=>{
+      const y=i===from?top-row.offsetTop:i>from&&i<=to?-shift:i>=to&&i<from?shift:0
+      other.style.transform=y?`translateY(${y}px)`:''
+    })
+    active.to=to
+  }
+  function finish(e:PointerEvent<HTMLDivElement>,drop:boolean){
+    const active=drag.current
+    if(active?.pointerId!==e.pointerId)return
+    if(drop)track(e)
+    drag.current=null
+    active.rows[active.from].removeAttribute('data-dragging')
+    active.rows.forEach(row=>{row.style.transform=''})
+    if(drop&&active.from!==active.to)reorder(active.id,active.to)
+  }
+  return <div ref={list} className="trip-list" onPointerMove={track} onPointerUp={e=>finish(e,true)}
+    onPointerCancel={e=>finish(e,false)} onLostPointerCapture={e=>finish(e,false)}>
+    {trips.map((t,index)=><div className="trip-row" key={t.id}>
+      <button type="button" className="trip-grip" aria-label={`Reorder ${t.name}`} title="Drag or use the up and down arrow keys"
+        disabled={trips.length<2} onPointerDown={e=>start(e,t.id,index)} onKeyDown={e=>{
+          if(e.key!=='ArrowUp'&&e.key!=='ArrowDown')return
+          e.preventDefault()
+          reorder(t.id,index+(e.key==='ArrowUp'?-1:1))
+        }}>
+        <svg viewBox="0 0 20 20" width="20" height="20" fill="currentColor" aria-hidden="true">
+          {[5,10,15].map(y=><g key={y}><circle cx="7" cy={y} r="1.4"/><circle cx="13" cy={y} r="1.4"/></g>)}
+        </svg>
+      </button>
+      <button type="button" className="trip-open" onClick={()=>open(t)}>
+        <YarnBall width="52" height="52"/>
+        <span><strong>{t.name}</strong><small>{t.stops[0].name} {t.mode==='loop'?'· Round trip':'→ '+t.stops.at(-1)?.name}</small></span>
+        <b>{t.total} {t.total===1?'day':'days'}</b>
+      </button>
+      <button type="button" className="trip-delete" aria-label={`Delete ${t.name}`} title="Delete trip" onClick={()=>remove(t)}>
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v5m4-5v5"/>
+        </svg>
+      </button>
+    </div>)}
+  </div>
+}
+
 function App(){
   const [library,setLibrary]=useState(readLibrary)
   const trip=library.trips.find(t=>t.id===library.active)
@@ -158,6 +222,18 @@ function App(){
     const exists=library.trips.some(item=>item.id===t.id)
     store({active:t.id,trips:exists?library.trips.map(item=>item.id===t.id?t:item):[t,...library.trips]})
   }
+  function deleteTrip(t:Trip){
+    if(!window.confirm(`Delete "${t.name}"?`))return
+    store({active:library.active===t.id?null:library.active,trips:library.trips.filter(item=>item.id!==t.id)})
+  }
+  function reorderTrip(id:string,to:number){
+    const from=library.trips.findIndex(t=>t.id===id)
+    if(from<0||to===from||to<0||to>=library.trips.length)return
+    const trips=[...library.trips]
+    const [moved]=trips.splice(from,1)
+    trips.splice(to,0,moved)
+    store({...library,trips})
+  }
   function open(t:Trip){save(t);select(null);setPlaceCard(null);setDateOpen(false);setPreview(null);setNotes(false);setPage('planner')}
   function selectPlace(place:SuggestedPlace|null){
     setPlaceCard(place)
@@ -166,7 +242,7 @@ function App(){
   const live=preview??trip
   return <>{page==='ticket'?<Ticket onTrips={()=>setPage('trips')} onCreate={(...args)=>open(createTrip(...args))}/>:
     page==='trips'?<main className="library"><header><Brand/><button onClick={()=>setPage('ticket')}>New trip</button></header><section><h1>My trips</h1>
-    {library.trips.length===0?<p>Your saved trips will appear here.</p>:<div className="trip-list">{library.trips.map(t=><button key={t.id} onClick={()=>open(t)}><YarnBall width="52" height="52"/><span><strong>{t.name}</strong><small>{t.stops[0].name} {t.mode==='loop'?'· Round trip':'→ '+t.stops.at(-1)?.name}</small></span><b>{t.total} {t.total===1?'day':'days'}</b></button>)}</div>}</section></main>:
+    {library.trips.length===0?<p>Your saved trips will appear here.</p>:<TripList trips={library.trips} open={open} remove={deleteTrip} reorder={reorderTrip}/>}</section></main>:
     trip&&live&&<main className="planner">
       <RouteMap key={trip.id} trip={trip} notes={notes} preview={setPreview} commit={t=>{save(t);select(null);setPlaceCard(null)}} select={s=>{select(s);setDateOpen(false);setPlaceCard(null)}} placeCard={placeCard} selectPlace={selectPlace}/>
       <Chrome name={trip.name} total={live.total} remaining={remaining(live)} routeLabel={trip.stops.map(s=>s.name).join(' → ')+(trip.mode==='loop'?' ↺':'')} notes={notes} onName={name=>save({...trip,name})} onTrips={()=>setPage('trips')} onTotal={total=>save({...trip,total})} onNotes={()=>{setNotes(!notes);select(null)}}

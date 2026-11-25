@@ -89,7 +89,7 @@ export function Chrome(props: ChromeProps) {
   const [tipsOpen, setTipsOpen] = useState(() => window.innerWidth >= 850 && window.innerHeight >= 600);
   return <div className="sl-chrome">
     <header className="sl-chrome-header">
-      <div className="sl-chrome-brand"><Brand/></div>
+      <div className="sl-chrome-brand"><button type="button" aria-label="SlackLine — My trips" onClick={props.onTrips}><Brand/></button></div>
       <div className="sl-chrome-trip"><TripName name={props.name} onName={props.onName}/><div className="sl-chrome-route" title={props.routeLabel}>{props.routeLabel}</div></div>
       <nav className="sl-chrome-actions" aria-label="Trip controls">
         <button type="button" onClick={props.onTrips}>My trips</button>

@@ -1,6 +1,6 @@
 # SlackLine · AI prompt summary
 
-I used OpenAI Codex to help plan and develop SlackLine. The following entries paraphrase my prompts in chronological order. The starting materials were the project notes, the technical requirements, and an existing interactive HTML prototype.
+I used OpenAI Codex to help plan and develop SlackLine. The earlier entries paraphrase my prompts in chronological order. The most recent chat is grouped by theme and records each prompt separately. The starting materials were the project notes, the technical requirements, and an existing interactive HTML prototype.
 
 | Order | What I asked or clarified                                                                                                                                                                                                                                                                                                                                                                        |
 | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -38,3 +38,26 @@ Here are the instructions you gave me in this conversation, in order:
 10. **Ask what code changed.** I listed the two modified files.
 11. **Check the Technical Requirement.** You asked what "response speed" means there, whether the current version meets it, what to change to meet everything, and finally asked me to run the tests.
 12. **Upload to GitHub and write a summary.** You said the issues were minor and asked me to upload, then asked for a teammate summary in Chinese, then English, then two sentences. I committed and pushed to `main` (`1dd3a41`).
+
+## Map interaction and place suggestions
+
+1. Make the map interaction as smooth and responsive as `slackline-prototype.html`. Keep the yarn line and balls steady when moving around the map, and make the yarn balls smaller when zoomed out far enough to see an entire continent.
+2. Show city and suggestion dots earlier, at wider zoom levels. The yarn already stays aligned with the map much better, but make panning and zooming even smoother and reduce any remaining lag.
+3. Show each city dot as soon as its city name appears on the map.
+4. Restore yellow dots for whole cities. Clicking a city dot should show fetched photos and backpacker notes, and dragging the yarn onto it should attach the route to that city. Use green dots for specific attractions and natural sites, which users should be able to add as one-stay or multi-stay stops.
+
+## Route postcards and notes
+
+5. Fix the number input in a travel leg's postcard. It behaves incorrectly when I click the leg's note and try to enter how long an overnight journey takes.
+6. Use stays instead of days as the general planning unit. Rename the travel leg's **Travel days** field to describe nights spent in transit, such as a night on an overnight train. Make note popups draggable and resizable so users can move them to the edge of the map or enlarge the writing area to see more of their notes.
+7. Remove the move-icon buttons shown on the note cards since clicking them doesn't do anything. Make links in note text clickable.
+
+## Trip length and stay allocation
+
+8. Keep trip length in days and show separately how many stays are available to spend. Make new stop dots start at their zero-stay size.
+9. Change the default size and allocation for a new stop to one stay while keeping zero-stay stops possible.
+
+## Saved trips and navigation
+
+10. Make the SlackLine logo on the map clickable and take users to My Trips.
+11. Replace the Delete text with a gray trash basket icon. Let users reorder saved trips by dragging them within the My Trips list. Use riffle signifier.

@@ -23,6 +23,7 @@
   gap: clamp(10px, 1.4vw, 24px);
 }
 .sl-chrome-brand { padding-right: clamp(10px, 1.4vw, 24px); border-right: 1.5px solid #b6b1a5; }
+.sl-chrome-brand button { display: block; padding: 0; border: 0; border-radius: 8px; background: transparent; pointer-events: auto; }
 .sl-chrome-trip { min-width: 0; }
 .sl-chrome-name, .sl-chrome-actions { display: flex; align-items: center; gap: 3px; }
 .sl-chrome-name input {
