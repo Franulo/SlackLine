@@ -67,7 +67,15 @@ h1,h2{font-family:Fraunces,Georgia,serif}button:focus-visible,a:focus-visible,in
 .editor-notes-heading button{padding:2px 5px;border:0;background:transparent;text-decoration:underline;color:#245e4b}
 .editor-note-text{flex:1;min-height:78px;margin-top:4px;padding:8px;border:1px solid #7a7466;border-radius:7px;background:white;white-space:pre-wrap;overflow-wrap:anywhere}
 .editor-note-text a{color:#245e4b;text-decoration:underline}
-.date-controls{position:absolute;bottom:34px;left:64px;z-index:4}.date-controls .panel{position:absolute;bottom:45px;left:0;width:260px}.date-list{max-height:35vh;overflow:auto;padding-left:20px}.date-list small,.trip-list small{display:block}
+.date-controls{position:absolute;bottom:34px;left:64px;z-index:4}
+.date-controls .panel{
+  position:absolute;bottom:45px;left:-52px;
+  width:min(320px,calc(100vw - 24px));height:320px;max-height:calc(100dvh - 92px);
+  display:flex;flex-direction:column;padding:12px 14px;overflow:auto
+}
+.date-controls .panel>label{flex:none}
+.date-list{flex:1;min-height:0;overflow:auto;margin:12px 0 0;padding-inline-start:3.5ch;overscroll-behavior:contain}
+.date-list small,.trip-list small{display:block}
 .map-message{position:fixed;bottom:40px;left:50%;transform:translateX(-50%);z-index:12;border-radius:12px;color:white;padding:10px 18px;background:#22302a}
 .library,.course{min-height:100vh;padding:clamp(20px,4vw,60px);background:#e3ece9}.library header{display:flex;align-items:center;justify-content:space-between}.library header button{background:#ffc93c;box-shadow:3px 3px #22302a;padding:10px 18px}.library section,.course>*{max-width:850px;margin-inline:auto}.library h1,.course h1{font-size:clamp(42px,6vw,70px)}.swatches,.icons{display:flex;gap:16px;align-items:center}.swatches>div{min-width:80px}.course nav{margin-block:32px}
 .trip-list{position:relative;display:grid;gap:15px}

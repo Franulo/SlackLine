@@ -61,3 +61,9 @@ Here are the instructions you gave me in this conversation, in order:
 
 10. Make the SlackLine logo on the map clickable and take users to My Trips.
 11. Replace the Delete text with a gray trash basket icon. Let users reorder saved trips by dragging them within the My Trips list. Use riffle signifier.
+
+## Calendar and itinerary
+
+12. Fix the calendar itinerary so the full numbers for stops 10 and 11 are visible. Their leading digits are clipped.
+13. Use the available space to the left of the calendar popup and make it wide enough for most itinerary entries to fit on one line.
+14. Reduce the extra whitespace on the right of the calendar popup. Give it a fixed height and let users scroll through the itinerary.
